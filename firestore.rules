@@ -1,0 +1,150 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null && request.auth.uid != null;
+    }
+
+    function currentUser() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isTeacher() {
+      return signedIn() 
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'teacher' 
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'active';
+    }
+
+    function isStudent() {
+      return signedIn() 
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'student' 
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'active';
+    }
+
+    function ownsClass(classId) {
+      return isTeacher()
+        && exists(/databases/$(database)/documents/classes/$(classId))
+        && get(/databases/$(database)/documents/classes/$(classId)).data.teacherId == request.auth.uid;
+    }
+
+    function isOwnStudentRecord(studentId) {
+      return isStudent()
+        && (
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.studentId == studentId
+          || resource.data.userId == request.auth.uid
+        );
+    }
+
+    function isClaimableStudentRecord() {
+      return resource.data.status == 'active'
+        && resource.data.userId == null;
+    }
+
+    function isStudentClaimUpdate(studentId) {
+      return isStudent()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['userId', 'email', 'updatedAt'])
+        && request.resource.data.userId == request.auth.uid;
+    }
+
+    function isValidClaimedStudentProfile(userId) {
+      return signedIn()
+        && userId == request.auth.uid
+        && request.resource.data.role == 'student'
+        && request.resource.data.status == 'active';
+    }
+
+    function studentBelongsToClass(studentId, classId) {
+      return exists(/databases/$(database)/documents/students/$(studentId))
+        && classId in get(/databases/$(database)/documents/students/$(studentId)).data.classIds;
+    }
+
+    function requestClassOwnedByTeacher() {
+      return isTeacher() && request.resource.data.teacherId == request.auth.uid;
+    }
+
+    match /users/{userId} {
+      allow read: if signedIn() && (
+        userId == request.auth.uid
+        || isTeacher()
+        || resource.data.email == request.auth.token.email
+      );
+      allow create: if signedIn()
+        && userId == request.auth.uid
+        && request.resource.data.status == 'active';
+      allow update: if signedIn()
+        && userId == request.auth.uid
+        && request.resource.data.role == resource.data.role
+        && request.resource.data.studentId == resource.data.studentId
+        && request.resource.data.studentNumber == resource.data.studentNumber
+        && request.resource.data.teacherId == resource.data.teacherId
+        && request.resource.data.classIds == resource.data.classIds
+        && request.resource.data.status == resource.data.status;
+      allow delete: if signedIn()
+        && resource.data.email == request.auth.token.email;
+    }
+
+    match /classes/{classId} {
+      allow read: if (
+          isTeacher()
+          && resource.data.teacherId == request.auth.uid
+        )
+        || (isStudent() && classId in currentUser().classIds)
+        // Allow reading classes during teacher migration (teacherId is still the old UID)
+        || (isTeacher() && exists(/databases/$(database)/documents/users/$(request.auth.uid)));
+      allow create: if requestClassOwnedByTeacher();
+      allow update: if isTeacher()
+        && (
+          // Normal update: teacher owns the class
+          (resource.data.teacherId == request.auth.uid
+            && request.resource.data.teacherId == request.auth.uid)
+          // Migration update: teacher is claiming classes from old UID
+          || request.resource.data.teacherId == request.auth.uid
+        );
+      allow delete: if false;
+    }
+
+    match /students/{studentId} {
+      allow read: if isTeacher() || isOwnStudentRecord(studentId) || isClaimableStudentRecord();
+      allow create: if isTeacher();
+      allow update: if isTeacher() || isStudentClaimUpdate(studentId);
+      allow delete: if false;
+    }
+
+    match /attendance/{attendanceId} {
+      allow read: if isTeacher() || isOwnStudentRecord(resource.data.studentId);
+      allow create, update: if ownsClass(request.resource.data.classId);
+      allow delete: if false;
+    }
+
+    match /activities/{activityId} {
+      allow read: if isTeacher() || (isStudent() && resource.data.classId in currentUser().classIds);
+      allow create, update: if ownsClass(request.resource.data.classId);
+      allow delete: if false;
+    }
+
+    match /activitySubmissions/{submissionId} {
+      allow read: if isTeacher() || isOwnStudentRecord(resource.data.studentId);
+      allow create, update: if ownsClass(request.resource.data.classId);
+      allow delete: if false;
+    }
+
+    match /announcements/{announcementId} {
+      allow read: if isTeacher()
+        || (
+          isStudent()
+          && resource.data.targetRole in ['all', 'students']
+          && (resource.data.classId == null || resource.data.classId in currentUser().classIds)
+        );
+      allow create, update: if isTeacher()
+        && request.resource.data.postedBy == request.auth.uid
+        && (
+          request.resource.data.classId == null
+          || ownsClass(request.resource.data.classId)
+        );
+      allow delete: if false;
+    }
+  }
+}

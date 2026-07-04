@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "399808245849",
+    "project_id": "student-mngt-6ca8e",
+    "storage_bucket": "student-mngt-6ca8e.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:399808245849:android:7dd6a02a231404a03b0148",
+        "android_client_info": {
+          "package_name": "com.studentmonitoringap"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBJJ6Y94t8-i7UlyLhC2l27sZ4w39A6sto"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
