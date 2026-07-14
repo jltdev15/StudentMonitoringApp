@@ -1,6 +1,7 @@
 import React, {useCallback, useEffect, useState} from 'react';
-import {StyleSheet} from 'react-native';
+import {StyleProp, StyleSheet, View, ViewStyle} from 'react-native';
 import {Button, Menu, Text} from 'react-native-paper';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import {AppButton} from '../../components/AppButton';
 import {AppCard} from '../../components/AppCard';
 import {AppHeader} from '../../components/AppHeader';
@@ -16,6 +17,42 @@ import {getTeacherClasses} from '../../services/classService';
 import {countByStatus} from '../../services/reportService';
 import {ClassRecord} from '../../types/models';
 import {toDateString} from '../../utils/dateUtils';
+
+type ReportCardProps = {
+  title: string;
+  icon: string;
+  color: string;
+  rows?: {label: string; value: number}[];
+  message?: string;
+  style?: StyleProp<ViewStyle>;
+};
+
+const ReportCard = ({
+  title,
+  icon,
+  color,
+  rows = [],
+  message,
+  style,
+}: ReportCardProps) => (
+  <AppCard style={[styles.reportCard, style]}>
+    <View style={styles.reportHeader}>
+      <View style={[styles.reportIcon, {backgroundColor: `${color}18`}]}>
+        <MaterialCommunityIcons name={icon} size={23} color={color} />
+      </View>
+      <Text variant="titleMedium" style={styles.cardTitle}>
+        {title}
+      </Text>
+    </View>
+    {rows.map(row => (
+      <View key={row.label} style={styles.metricRow}>
+        <Text style={styles.metricLabel}>{row.label}</Text>
+        <Text style={[styles.metricValue, {color}]}>{row.value}</Text>
+      </View>
+    ))}
+    {message ? <Text style={styles.cardText}>{message}</Text> : null}
+  </AppCard>
+);
 
 export const ReportsScreen = () => {
   const {profile} = useAuth();
@@ -67,6 +104,7 @@ export const ReportsScreen = () => {
   return (
     <Screen>
       <AppHeader
+        variant="teacher"
         title="Reports"
         subtitle="Attendance, activities, performance, and missing work."
       />
@@ -74,7 +112,13 @@ export const ReportsScreen = () => {
         visible={menuVisible}
         onDismiss={() => setMenuVisible(false)}
         anchor={
-          <Button mode="outlined" onPress={() => setMenuVisible(true)}>
+          <Button
+            contentStyle={styles.classPickerContent}
+            icon="school-outline"
+            labelStyle={styles.classPickerLabel}
+            mode="outlined"
+            onPress={() => setMenuVisible(true)}
+            style={styles.classPicker}>
             {selectedClass ? selectedClass.className : 'Select class'}
           </Button>
         }>
@@ -99,60 +143,99 @@ export const ReportsScreen = () => {
         value={endDate}
         onChangeText={setEndDate}
       />
-      <AppButton onPress={generate}>
-        Generate Reports
-      </AppButton>
-      <AppCard>
-        <Text variant="titleMedium" style={styles.cardTitle}>
-          Attendance Report
-        </Text>
-        <Text style={styles.cardText}>Present: {attendanceSummary.present || 0}</Text>
-        <Text style={styles.cardText}>Absent: {attendanceSummary.absent || 0}</Text>
-        <Text style={styles.cardText}>Late: {attendanceSummary.late || 0}</Text>
-        <Text style={styles.cardText}>Excused: {attendanceSummary.excused || 0}</Text>
-      </AppCard>
-      <AppCard>
-        <Text variant="titleMedium" style={styles.cardTitle}>
-          Activity Report
-        </Text>
-        <Text style={styles.cardText}>Submitted: {activitySummary.submitted || 0}</Text>
-        <Text style={styles.cardText}>Missing: {activitySummary.missing || 0}</Text>
-        <Text style={styles.cardText}>Late: {activitySummary.late || 0}</Text>
-        <Text style={styles.cardText}>Excused: {activitySummary.excused || 0}</Text>
-      </AppCard>
-      <AppCard>
-        <Text variant="titleMedium" style={styles.cardTitle}>
-          Student Performance
-        </Text>
-        <Text style={styles.cardText}>
-          Use class filters above to review attendance and activity totals.
-          Per-student drilldown can be added from this screen later.
-        </Text>
-      </AppCard>
-      <AppCard>
-        <Text variant="titleMedium" style={styles.cardTitle}>
-          Missing Activity Report
-        </Text>
-        <Text style={styles.cardText}>
-          Missing activities: {activitySummary.missing || 0}
-        </Text>
-      </AppCard>
+      <AppButton onPress={generate}>Generate Reports</AppButton>
+      <Text style={styles.summaryTitle}>Report Summary</Text>
+      <View style={styles.reportGrid}>
+        <ReportCard
+          title="Attendance"
+          icon="calendar-check-outline"
+          color="#16A34A"
+          rows={[
+            {label: 'Present', value: attendanceSummary.present || 0},
+            {label: 'Absent', value: attendanceSummary.absent || 0},
+            {label: 'Late', value: attendanceSummary.late || 0},
+          ]}
+          style={styles.halfCard}
+        />
+        <ReportCard
+          title="Activities"
+          icon="clipboard-check-outline"
+          color="#2563EB"
+          rows={[
+            {label: 'Submitted', value: activitySummary.submitted || 0},
+            {label: 'Missing', value: activitySummary.missing || 0},
+            {label: 'Late', value: activitySummary.late || 0},
+          ]}
+          style={styles.halfCard}
+        />
+      </View>
+      <ReportCard
+        title="Student Performance"
+        icon="chart-line"
+        color="#7C3AED"
+        message="Use the selected class and date range to review attendance, activity, and missing-work trends."
+      />
+      <ReportCard
+        title="Missing Activities"
+        icon="file-alert-outline"
+        color="#EF4444"
+        rows={[
+          {label: 'Missing activities', value: activitySummary.missing || 0},
+        ]}
+      />
     </Screen>
   );
 };
 
 const styles = StyleSheet.create({
   cardText: {
-    color: '#3B4968',
-    fontSize: 15,
+    color: '#7181A0',
+    fontSize: 13,
     fontWeight: '600',
-    lineHeight: 22,
-    marginTop: 6,
+    lineHeight: 19,
+    marginTop: 12,
   },
   cardTitle: {
-    color: '#081638',
-    fontSize: 18,
+    color: '#112B5D',
+    flex: 1,
+    fontSize: 16,
     fontWeight: '900',
-    marginBottom: 4,
+  },
+  classPicker: {
+    backgroundColor: '#FFFFFF',
+    borderColor: '#DCE8FA',
+    borderRadius: 16,
+    marginBottom: 16,
+  },
+  classPickerContent: {height: 52, justifyContent: 'flex-start'},
+  classPickerLabel: {color: '#112B5D', fontSize: 15, fontWeight: '800'},
+  halfCard: {width: '48%'},
+  metricLabel: {color: '#7181A0', fontSize: 12, fontWeight: '700'},
+  metricRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 9,
+  },
+  metricValue: {fontSize: 15, fontWeight: '900'},
+  reportCard: {borderColor: '#EEF3FA', borderRadius: 19, padding: 15},
+  reportGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  reportHeader: {alignItems: 'center', flexDirection: 'row', gap: 9},
+  reportIcon: {
+    alignItems: 'center',
+    borderRadius: 12,
+    height: 40,
+    justifyContent: 'center',
+    width: 40,
+  },
+  summaryTitle: {
+    color: '#112B5D',
+    fontSize: 20,
+    fontWeight: '900',
+    marginBottom: 14,
+    marginTop: 27,
   },
 });

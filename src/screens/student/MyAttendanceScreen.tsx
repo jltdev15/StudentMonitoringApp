@@ -30,13 +30,21 @@ export const MyAttendanceScreen = () => {
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
   const [month, setMonth] = useState(toMonthKey());
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   const load = useCallback(async () => {
     const studentId = profile?.studentId || student?.id;
-    if (studentId) {
-      setRecords(await getStudentAttendance(studentId));
+    setLoading(true);
+    setError('');
+    try {
+      if (studentId) {
+        setRecords(await getStudentAttendance(studentId));
+      }
+    } catch {
+      setError('We could not load your attendance. Please try again.');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, [profile?.studentId, student?.id]);
 
   useEffect(() => {
@@ -50,6 +58,20 @@ export const MyAttendanceScreen = () => {
 
   if (loading) {
     return <LoadingState label="Loading attendance..." />;
+  }
+
+  if (error) {
+    return (
+      <Screen>
+        <AppHeader title="My Attendance" subtitle="Review records by month." />
+        <EmptyState
+          title="Unable to load attendance"
+          message={error}
+          actionLabel="Try again"
+          onAction={load}
+        />
+      </Screen>
+    );
   }
 
   return (

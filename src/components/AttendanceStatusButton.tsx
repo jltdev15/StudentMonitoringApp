@@ -33,7 +33,11 @@ export const AttendanceStatusButton = ({status, selected, onPress}: Props) => {
         pressed && styles.pressed,
       ]}>
       <MaterialCommunityIcons
-        name={selected ? statusIcons[status].replace('-outline', '') : statusIcons[status]}
+        name={
+          selected
+            ? statusIcons[status].replace('-outline', '')
+            : statusIcons[status]
+        }
         size={18}
         color={selected ? '#FFFFFF' : color}
         style={styles.icon}
@@ -48,15 +52,15 @@ export const AttendanceStatusButton = ({status, selected, onPress}: Props) => {
 const styles = StyleSheet.create({
   button: {
     alignItems: 'center',
-    borderRadius: 12,
+    borderRadius: 14,
     borderWidth: 1.5,
     flex: 1,
     flexDirection: 'row',
     justifyContent: 'center',
     margin: 4,
     minWidth: '45%',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingHorizontal: 11,
+    paddingVertical: 9,
   },
   icon: {
     marginRight: 6,
@@ -68,5 +72,6 @@ const styles = StyleSheet.create({
   },
   pressed: {
     opacity: 0.75,
+    transform: [{scale: 0.98}],
   },
 });

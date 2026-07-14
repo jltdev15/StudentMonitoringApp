@@ -1,11 +1,5 @@
 import React, {PropsWithChildren} from 'react';
-import {
-  Pressable,
-  StyleProp,
-  StyleSheet,
-  View,
-  ViewStyle,
-} from 'react-native';
+import {Pressable, StyleProp, StyleSheet, View, ViewStyle} from 'react-native';
 
 type Props = PropsWithChildren<{
   onPress?: () => void;
@@ -34,16 +28,16 @@ export const AppCard = ({children, onPress, style}: Props) => {
 const styles = StyleSheet.create({
   card: {
     backgroundColor: '#FFFFFF',
-    borderColor: '#EEF2F7',
-    borderRadius: 14,
+    borderColor: '#EEF3FA',
+    borderRadius: 20,
     borderWidth: 1,
     elevation: 3,
-    marginBottom: 14,
-    padding: 18,
+    marginBottom: 13,
+    padding: 16,
     shadowColor: '#7685A3',
-    shadowOffset: {height: 8, width: 0},
-    shadowOpacity: 0.1,
-    shadowRadius: 18,
+    shadowOffset: {height: 5, width: 0},
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
   },
   cardPressed: {
     opacity: 0.86,

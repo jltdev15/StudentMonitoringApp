@@ -146,7 +146,8 @@ export const importStudentRoster = async (
     if (existing) {
       await updateDoc(docRef(collections.students, existing.id), {
         classIds: arrayUnion(classId),
-        fullName: existing.fullName || fullName,
+        fullName,
+        status: 'active',
         updatedAt: now(),
       });
       updated += 1;

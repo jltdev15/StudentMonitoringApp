@@ -1,5 +1,6 @@
 import React from 'react';
 import {
+  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -35,6 +36,20 @@ export const SettingsScreen = ({navigation}: Props) => {
     .map(part => part[0]?.toUpperCase())
     .join('');
 
+  const confirmSignOut = () => {
+    if (loading) {
+      return;
+    }
+    Alert.alert(
+      'Log out?',
+      'You will need to sign in again to access your teacher account.',
+      [
+        {text: 'Cancel', style: 'cancel'},
+        {text: 'Log out', style: 'destructive', onPress: signOut},
+      ],
+    );
+  };
+
   return (
     <View style={styles.root}>
       <ScrollView
@@ -62,6 +77,9 @@ export const SettingsScreen = ({navigation}: Props) => {
                 color="#FFFFFF"
               />
             </Pressable>
+            <Text numberOfLines={1} style={styles.inlineTitle}>
+              Settings
+            </Text>
             <View style={styles.headerIcon}>
               <MaterialCommunityIcons
                 name="cog-outline"
@@ -71,9 +89,6 @@ export const SettingsScreen = ({navigation}: Props) => {
             </View>
           </View>
 
-          <Text style={[styles.eyebrow, isCompact && styles.eyebrowCompact]}>
-            Account settings
-          </Text>
           <Text style={[styles.title, isCompact && styles.titleCompact]}>
             Manage your profile
           </Text>
@@ -135,7 +150,7 @@ export const SettingsScreen = ({navigation}: Props) => {
               accessibilityRole="button"
               accessibilityLabel="Log out"
               disabled={loading}
-              onPress={signOut}
+              onPress={confirmSignOut}
               style={({pressed}) => [
                 styles.logoutRow,
                 pressed && styles.pressed,
@@ -215,16 +230,18 @@ const styles = StyleSheet.create({
     width: 54,
   },
   hero: {
-    backgroundColor: '#062A66',
-    minHeight: 278,
+    backgroundColor: '#083A93',
+    borderBottomLeftRadius: 32,
+    borderBottomRightRadius: 32,
+    minHeight: 246,
     overflow: 'hidden',
     paddingBottom: 72,
     paddingHorizontal: 38,
     paddingTop: 42,
   },
   heroCompact: {
-    minHeight: 250,
-    paddingBottom: 64,
+    minHeight: 220,
+    paddingBottom: 56,
     paddingHorizontal: 24,
     paddingTop: 34,
   },
@@ -244,6 +261,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     width: 48,
   },
+  inlineTitle: {
+    color: '#FFFFFF',
+    flex: 1,
+    fontSize: 22,
+    fontWeight: '900',
+    letterSpacing: -0.4,
+    marginLeft: 10,
+    marginRight: 10,
+  },
   infoRow: {
     alignItems: 'center',
     flexDirection: 'row',
@@ -254,15 +280,15 @@ const styles = StyleSheet.create({
   },
   listCard: {
     backgroundColor: '#FFFFFF',
-    borderColor: '#EEF2F7',
-    borderRadius: 14,
+    borderColor: '#EEF3FA',
+    borderRadius: 20,
     borderWidth: 1,
     elevation: 3,
     overflow: 'hidden',
     shadowColor: '#7685A3',
-    shadowOffset: {height: 8, width: 0},
-    shadowOpacity: 0.1,
-    shadowRadius: 18,
+    shadowOffset: {height: 5, width: 0},
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
   },
   logoutIcon: {
     backgroundColor: '#FFF1F2',
@@ -287,7 +313,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
     borderColor: '#EEF2F7',
-    borderRadius: 18,
+    borderRadius: 20,
     borderWidth: 1,
     elevation: 4,
     flexDirection: 'row',

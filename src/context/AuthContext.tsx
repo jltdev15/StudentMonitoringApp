@@ -35,6 +35,7 @@ type AuthContextValue = {
   profile: UserProfile | null;
   student: StudentRecord | null;
   initializing: boolean;
+  profileLoading: boolean;
   loading: boolean;
   authError: string | null;
   signIn: (email: string, password: string) => Promise<void>;
@@ -58,6 +59,7 @@ export const AuthProvider = ({children}: PropsWithChildren) => {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [student, setStudent] = useState<StudentRecord | null>(null);
   const [initializing, setInitializing] = useState(true);
+  const [profileLoading, setProfileLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
 
@@ -118,6 +120,7 @@ export const AuthProvider = ({children}: PropsWithChildren) => {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(firebaseAuth, async user => {
+      setProfileLoading(true);
       setFirebaseUser(user);
       // We don't wipe authError here because it clobbers errors thrown by registerStudent.
       try {
@@ -146,6 +149,7 @@ export const AuthProvider = ({children}: PropsWithChildren) => {
           );
         }
       } finally {
+        setProfileLoading(false);
         setInitializing(false);
       }
     });
@@ -161,6 +165,7 @@ export const AuthProvider = ({children}: PropsWithChildren) => {
 
         // Load profile first so we know the user's role
         let userProfile: UserProfile | null = null;
+        setProfileLoading(true);
         try {
           await loadProfile(credential.user);
           userProfile = await getUserProfile(credential.user.uid);
@@ -192,6 +197,7 @@ export const AuthProvider = ({children}: PropsWithChildren) => {
         );
         throw error;
       } finally {
+        setProfileLoading(false);
         setLoading(false);
       }
     },
@@ -272,7 +278,12 @@ export const AuthProvider = ({children}: PropsWithChildren) => {
   }, []);
 
   const refreshProfile = useCallback(async () => {
-    await loadProfile(firebaseUser);
+    setProfileLoading(true);
+    try {
+      await loadProfile(firebaseUser);
+    } finally {
+      setProfileLoading(false);
+    }
   }, [firebaseUser, loadProfile]);
 
   const value = useMemo(
@@ -281,6 +292,7 @@ export const AuthProvider = ({children}: PropsWithChildren) => {
       profile,
       student,
       initializing,
+      profileLoading,
       loading,
       authError,
       signIn,
@@ -294,6 +306,7 @@ export const AuthProvider = ({children}: PropsWithChildren) => {
       firebaseUser,
       initializing,
       loading,
+      profileLoading,
       profile,
       registerStudent,
       resendVerification,

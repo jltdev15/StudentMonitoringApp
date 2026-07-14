@@ -1,6 +1,7 @@
 import {NavigatorScreenParams} from '@react-navigation/native';
 import {
   ActivityRecord,
+  AnnouncementRecord,
   AttendanceStatus,
   ClassRecord,
   StudentRecord,
@@ -32,11 +33,14 @@ export type TeacherStackParamList = {
   ActivityHome: undefined;
   ActivityList: {classId?: string} | undefined;
   CreateActivity: {classId?: string} | undefined;
+  EditActivity: {activity: ActivityRecord};
   ActivityDetails: {activity: ActivityRecord};
   ScoreEncoding: {activity: ActivityRecord};
   ActivityHistory: undefined;
   Reports: undefined;
   Announcements: undefined;
+  AnnouncementHistory: undefined;
+  EditAnnouncement: {announcement: AnnouncementRecord};
   Settings: undefined;
   AboutApp: undefined;
   HelpSupport: undefined;
@@ -44,9 +48,9 @@ export type TeacherStackParamList = {
 
 export type TeacherTabParamList = {
   DashboardTab: NavigatorScreenParams<TeacherStackParamList>;
-  AttendanceTab: NavigatorScreenParams<TeacherStackParamList>;
+  StudentsTab: NavigatorScreenParams<TeacherStackParamList>;
   ClassesTab: NavigatorScreenParams<TeacherStackParamList>;
-  ActivitiesTab: NavigatorScreenParams<TeacherStackParamList>;
+  ReportsTab: NavigatorScreenParams<TeacherStackParamList>;
   MoreTab: NavigatorScreenParams<TeacherStackParamList>;
 };
 
@@ -57,6 +61,15 @@ export type StudentStackParamList = {
   MyScores: undefined;
   StudentAnnouncements: undefined;
   StudentProfile: undefined;
+  SubmitActivity: {activity: ActivityRecord};
+};
+
+export type StudentTabParamList = {
+  DashboardTab: NavigatorScreenParams<StudentStackParamList>;
+  AttendanceTab: NavigatorScreenParams<StudentStackParamList>;
+  ActivitiesTab: NavigatorScreenParams<StudentStackParamList>;
+  AnnouncementsTab: NavigatorScreenParams<StudentStackParamList>;
+  ProfileTab: NavigatorScreenParams<StudentStackParamList>;
 };
 
 export type StudentWithAttendance = StudentRecord & {

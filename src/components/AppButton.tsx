@@ -40,11 +40,11 @@ export const AppButton = ({
 const styles = StyleSheet.create({
   button: {
     borderColor: '#DCE8FF',
-    borderRadius: 14,
+    borderRadius: 18,
     marginTop: 8,
   },
   content: {
-    minHeight: 54,
+    minHeight: 52,
   },
   fullWidth: {
     alignSelf: 'stretch',

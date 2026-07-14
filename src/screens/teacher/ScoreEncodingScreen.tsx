@@ -1,5 +1,5 @@
 import React, {useCallback, useEffect, useState} from 'react';
-import {StyleSheet, View} from 'react-native';
+import {Image, Modal, Pressable, StyleSheet, View} from 'react-native';
 import {NativeStackScreenProps} from '@react-navigation/native-stack';
 import {Button, Text} from 'react-native-paper';
 import {AppButton} from '../../components/AppButton';
@@ -29,7 +29,11 @@ export const ScoreEncodingScreen = ({route}: Props) => {
   const {activity} = route.params;
   const [students, setStudents] = useState<StudentRecord[]>([]);
   const [drafts, setDrafts] = useState<Record<string, SubmissionDraft>>({});
+  const [submissionsByStudent, setSubmissionsByStudent] = useState<
+    Record<string, import('../../types/models').ActivitySubmissionRecord>
+  >({});
   const [saving, setSaving] = useState(false);
+  const [selectedImageUrl, setSelectedImageUrl] = useState('');
 
   const load = useCallback(async () => {
     const [nextStudents, submissions] = await Promise.all([
@@ -39,10 +43,16 @@ export const ScoreEncodingScreen = ({route}: Props) => {
     const submissionByStudent = Object.fromEntries(
       submissions.map(item => [item.studentId, item]),
     );
-    setStudents(nextStudents);
+    const sortedStudents = [...nextStudents].sort((first, second) =>
+      first.fullName.localeCompare(second.fullName, undefined, {
+        sensitivity: 'base',
+      }),
+    );
+    setSubmissionsByStudent(submissionByStudent);
+    setStudents(sortedStudents);
     setDrafts(
       Object.fromEntries(
-        nextStudents.map(student => [
+        sortedStudents.map(student => [
           student.id,
           {
             studentId: student.id,
@@ -104,6 +114,29 @@ export const ScoreEncodingScreen = ({route}: Props) => {
               ))}
             </View>
             {draft?.status ? <StatusBadge status={draft.status} /> : null}
+            {submissionsByStudent[student.id]?.attachments?.length ? (
+              <View style={styles.attachments}>
+                <Text style={styles.attachmentsLabel}>Submitted Images</Text>
+                <View style={styles.thumbnailRow}>
+                  {submissionsByStudent[student.id].attachments?.map(
+                    attachment => (
+                      <Pressable
+                        key={attachment.id}
+                        accessibilityRole="button"
+                        accessibilityLabel={`View ${attachment.fileName}`}
+                        onPress={() =>
+                          setSelectedImageUrl(attachment.downloadUrl)
+                        }>
+                        <Image
+                          source={{uri: attachment.downloadUrl}}
+                          style={styles.thumbnail}
+                        />
+                      </Pressable>
+                    ),
+                  )}
+                </View>
+              </View>
+            ) : null}
             <AppTextInput
               label="Score"
               value={draft?.score == null ? '' : String(draft.score)}
@@ -123,11 +156,52 @@ export const ScoreEncodingScreen = ({route}: Props) => {
       <AppButton loading={saving} onPress={save}>
         Save Scores
       </AppButton>
+      <Modal
+        animationType="fade"
+        transparent
+        visible={Boolean(selectedImageUrl)}
+        onRequestClose={() => setSelectedImageUrl('')}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Close image viewer"
+          onPress={() => setSelectedImageUrl('')}
+          style={styles.imageModal}>
+          {selectedImageUrl ? (
+            <Image
+              source={{uri: selectedImageUrl}}
+              style={styles.fullImage}
+              resizeMode="contain"
+            />
+          ) : null}
+        </Pressable>
+      </Modal>
     </Screen>
   );
 };
 
 const styles = StyleSheet.create({
+  attachments: {marginTop: 12},
+  attachmentsLabel: {
+    color: '#52617E',
+    fontSize: 11,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
+  fullImage: {height: '88%', width: '92%'},
+  imageModal: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(3, 12, 41, 0.92)',
+    flex: 1,
+    justifyContent: 'center',
+    padding: 18,
+  },
   name: {fontWeight: '800', marginBottom: 8},
   row: {flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8},
+  thumbnail: {
+    backgroundColor: '#E2E8F0',
+    borderRadius: 8,
+    height: 64,
+    width: 64,
+  },
+  thumbnailRow: {flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8},
 });

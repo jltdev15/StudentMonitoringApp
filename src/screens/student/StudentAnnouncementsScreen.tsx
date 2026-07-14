@@ -14,13 +14,21 @@ export const StudentAnnouncementsScreen = () => {
   const {profile, student} = useAuth();
   const [announcements, setAnnouncements] = useState<AnnouncementRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   const load = useCallback(async () => {
     const classIds = profile?.classIds?.length
       ? profile.classIds
       : student?.classIds || [];
-    setAnnouncements(await getAnnouncementsForStudent(classIds));
-    setLoading(false);
+    setLoading(true);
+    setError('');
+    try {
+      setAnnouncements(await getAnnouncementsForStudent(classIds));
+    } catch {
+      setError('We could not load announcements. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   }, [profile, student]);
 
   useEffect(() => {
@@ -29,6 +37,20 @@ export const StudentAnnouncementsScreen = () => {
 
   if (loading) {
     return <LoadingState label="Loading announcements..." />;
+  }
+
+  if (error) {
+    return (
+      <Screen>
+        <AppHeader title="Announcements" subtitle="Class and school updates." />
+        <EmptyState
+          title="Unable to load announcements"
+          message={error}
+          actionLabel="Try again"
+          onAction={load}
+        />
+      </Screen>
+    );
   }
 
   return (

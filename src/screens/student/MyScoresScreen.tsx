@@ -22,21 +22,29 @@ export const MyScoresScreen = () => {
     [],
   );
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   const load = useCallback(async () => {
     const classIds = profile?.classIds?.length
       ? profile.classIds
       : student?.classIds || [];
     const studentId = profile?.studentId || student?.id;
-    const [nextActivities, nextSubmissions] = await Promise.all([
-      getActivitiesForClasses(classIds),
-      studentId ? getSubmissionsByStudent(studentId) : Promise.resolve([]),
-    ]);
-    setActivities(nextActivities);
-    setSubmissions(
-      nextSubmissions.filter(item => typeof item.score === 'number'),
-    );
-    setLoading(false);
+    setLoading(true);
+    setError('');
+    try {
+      const [nextActivities, nextSubmissions] = await Promise.all([
+        getActivitiesForClasses(classIds),
+        studentId ? getSubmissionsByStudent(studentId) : Promise.resolve([]),
+      ]);
+      setActivities(nextActivities);
+      setSubmissions(
+        nextSubmissions.filter(item => typeof item.score === 'number'),
+      );
+    } catch {
+      setError('We could not load your scores. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   }, [profile, student]);
 
   useEffect(() => {
@@ -51,6 +59,23 @@ export const MyScoresScreen = () => {
 
   if (loading) {
     return <LoadingState label="Loading scores..." />;
+  }
+
+  if (error) {
+    return (
+      <Screen>
+        <AppHeader
+          title="My Scores"
+          subtitle="See scored activities and your average."
+        />
+        <EmptyState
+          title="Unable to load scores"
+          message={error}
+          actionLabel="Try again"
+          onAction={load}
+        />
+      </Screen>
+    );
   }
 
   return (

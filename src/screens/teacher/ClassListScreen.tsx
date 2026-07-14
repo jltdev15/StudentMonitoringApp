@@ -1,7 +1,8 @@
 import React, {useCallback, useEffect, useState} from 'react';
-import {StyleSheet} from 'react-native';
+import {StyleSheet, View} from 'react-native';
 import {NativeStackScreenProps} from '@react-navigation/native-stack';
 import {Text} from 'react-native-paper';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import {AppCard} from '../../components/AppCard';
 import {AppHeader} from '../../components/AppHeader';
 import {EmptyState} from '../../components/EmptyState';
@@ -45,6 +46,7 @@ export const ClassListScreen = ({navigation}: Props) => {
   return (
     <Screen>
       <AppHeader
+        variant="teacher"
         title="Classes"
         subtitle="Manage your active classes."
         rightIcon="plus"
@@ -54,19 +56,47 @@ export const ClassListScreen = ({navigation}: Props) => {
         classes.map(item => (
           <AppCard
             key={item.id}
+            style={styles.classCard}
             onPress={() =>
               navigation.navigate('ClassDetails', {classItem: item})
             }>
-            <Text variant="titleMedium" style={styles.title}>
-              {item.className}
-            </Text>
-            <Text style={styles.meta}>
-              {item.subject} · {item.gradeLevel} - {item.section}
-            </Text>
-            <Text style={styles.subMeta}>
-              {item.studentCount || 0} students ·{' '}
-              {item.schedule || 'No schedule'}
-            </Text>
+            <View style={styles.cardTopRow}>
+              <View style={styles.classIcon}>
+                <MaterialCommunityIcons
+                  name="book-open-variant"
+                  size={25}
+                  color="#2563EB"
+                />
+              </View>
+              <View style={styles.copy}>
+                <Text variant="titleMedium" style={styles.title}>
+                  {item.className}
+                </Text>
+                <Text numberOfLines={1} style={styles.meta}>
+                  {item.subject} · {item.gradeLevel} - {item.section}
+                </Text>
+              </View>
+              <MaterialCommunityIcons
+                name="chevron-right"
+                size={25}
+                color="#7181A0"
+              />
+            </View>
+            <View style={styles.detailsRow}>
+              <View style={styles.detailPill}>
+                <MaterialCommunityIcons
+                  name="account-group-outline"
+                  size={15}
+                  color="#2563EB"
+                />
+                <Text style={styles.detailText}>
+                  {item.studentCount || 0} students
+                </Text>
+              </View>
+              <Text numberOfLines={1} style={styles.schedule}>
+                {item.schedule || 'No schedule'}
+              </Text>
+            </View>
           </AppCard>
         ))
       ) : (
@@ -80,21 +110,49 @@ export const ClassListScreen = ({navigation}: Props) => {
 };
 
 const styles = StyleSheet.create({
-  meta: {
-    color: '#081638',
-    fontSize: 15,
-    fontWeight: '700',
-    marginTop: 6,
+  cardTopRow: {alignItems: 'center', flexDirection: 'row'},
+  classCard: {
+    borderColor: '#EEF3FA',
+    borderRadius: 20,
+    marginBottom: 13,
+    padding: 16,
   },
-  subMeta: {
-    color: '#3B4968',
-    fontSize: 14,
+  classIcon: {
+    alignItems: 'center',
+    backgroundColor: '#E8F0FF',
+    borderRadius: 15,
+    height: 52,
+    justifyContent: 'center',
+    marginRight: 13,
+    width: 52,
+  },
+  copy: {flex: 1, minWidth: 0},
+  detailsRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 15,
+  },
+  detailPill: {
+    alignItems: 'center',
+    backgroundColor: '#F1F6FF',
+    borderRadius: 10,
+    flexDirection: 'row',
+    gap: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+  },
+  detailText: {color: '#2563EB', fontSize: 12, fontWeight: '800'},
+  meta: {
+    color: '#7181A0',
+    fontSize: 13,
     fontWeight: '600',
     marginTop: 4,
   },
+  schedule: {color: '#7181A0', fontSize: 12, fontWeight: '700', maxWidth: 145},
   title: {
-    color: '#081638',
-    fontSize: 18,
+    color: '#112B5D',
+    fontSize: 17,
     fontWeight: '900',
   },
 });

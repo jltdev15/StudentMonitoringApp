@@ -142,7 +142,9 @@ export const AttendanceScreen = ({route, navigation}: Props) => {
     }
     const pendingCount = Object.values(drafts).filter(d => !d.status).length;
     if (pendingCount > 0) {
-      setErrorMessage(`Please mark attendance for all students. ${pendingCount} remaining.`);
+      setErrorMessage(
+        `Please mark attendance for all students. ${pendingCount} remaining.`,
+      );
       return;
     }
     setSuccessMessage('');
@@ -153,7 +155,9 @@ export const AttendanceScreen = ({route, navigation}: Props) => {
         classId,
         date,
         profile.uid,
-        Object.values(drafts) as (AttendanceDraft & {status: AttendanceStatus})[],
+        Object.values(drafts) as (AttendanceDraft & {
+          status: AttendanceStatus;
+        })[],
       );
       setSuccessMessage('Attendance saved successfully.');
       setTimeout(() => {
@@ -241,11 +245,7 @@ export const AttendanceScreen = ({route, navigation}: Props) => {
         />
         {classId && students.length ? (
           <View style={styles.searchWrap}>
-            <MaterialCommunityIcons
-              name="magnify"
-              size={22}
-              color="#52617E"
-            />
+            <MaterialCommunityIcons name="magnify" size={22} color="#52617E" />
             <TextInput
               placeholder="Search students"
               placeholderTextColor="#8A94A8"
@@ -309,7 +309,10 @@ export const AttendanceScreen = ({route, navigation}: Props) => {
       </ScrollView>
       {hasAttendanceDrafts ? (
         <View style={styles.stickyActionBar}>
-          <AppButton loading={saving} onPress={save} style={styles.stickyButton}>
+          <AppButton
+            loading={saving}
+            onPress={save}
+            style={styles.stickyButton}>
             Save Attendance
           </AppButton>
         </View>
@@ -351,16 +354,18 @@ const styles = StyleSheet.create({
   },
   header: {
     alignItems: 'center',
-    backgroundColor: '#062A66',
+    backgroundColor: '#083A93',
+    borderBottomLeftRadius: 30,
+    borderBottomRightRadius: 30,
     flexDirection: 'row',
     gap: 12,
-    marginBottom: 18,
+    marginBottom: 22,
     marginHorizontal: -20,
     marginTop: -20,
-    minHeight: 104,
-    paddingBottom: 22,
-    paddingHorizontal: 16,
-    paddingTop: 20,
+    minHeight: 96,
+    paddingBottom: 18,
+    paddingHorizontal: 20,
+    paddingTop: 18,
   },
   headerCopy: {
     flex: 1,
@@ -368,10 +373,11 @@ const styles = StyleSheet.create({
   },
   headerIconButton: {
     alignItems: 'center',
-    borderRadius: 14,
-    height: 44,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 13,
+    height: 42,
     justifyContent: 'center',
-    width: 44,
+    width: 42,
   },
   headerSubtitle: {
     color: '#E7EEFD',
@@ -384,8 +390,8 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: '900',
   },
-  meta: {color: '#64748B', marginBottom: 10},
-  name: {fontWeight: '800'},
+  meta: {color: '#7181A0', marginBottom: 10},
+  name: {color: '#112B5D', fontWeight: '800'},
   pressed: {
     opacity: 0.78,
   },
@@ -408,8 +414,8 @@ const styles = StyleSheet.create({
   searchWrap: {
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    borderColor: '#DDE8F8',
-    borderRadius: 14,
+    borderColor: '#DCE8FA',
+    borderRadius: 18,
     borderWidth: 1,
     elevation: 1,
     flexDirection: 'row',
@@ -417,9 +423,9 @@ const styles = StyleSheet.create({
     marginBottom: 14,
     paddingHorizontal: 14,
     shadowColor: '#7685A3',
-    shadowOffset: {height: 8, width: 0},
-    shadowOpacity: 0.08,
-    shadowRadius: 18,
+    shadowOffset: {height: 5, width: 0},
+    shadowOpacity: 0.07,
+    shadowRadius: 12,
   },
   stickyActionBar: {
     backgroundColor: '#FFFFFF',
@@ -437,7 +443,12 @@ const styles = StyleSheet.create({
   stickyButton: {
     marginTop: 0,
   },
-  statusRow: {flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -4, marginTop: 4},
+  statusRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginHorizontal: -4,
+    marginTop: 4,
+  },
   successCard: {
     backgroundColor: '#F0FDF4',
     borderColor: '#BBF7D0',

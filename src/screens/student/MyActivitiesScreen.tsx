@@ -1,5 +1,6 @@
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
-import {StyleSheet, View} from 'react-native';
+import {Pressable, StyleSheet, View} from 'react-native';
+import {NativeStackScreenProps} from '@react-navigation/native-stack';
 import {Text} from 'react-native-paper';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import {AppCard} from '../../components/AppCard';
@@ -15,6 +16,9 @@ import {
 } from '../../services/activityService';
 import {ActivityRecord, ActivitySubmissionRecord} from '../../types/models';
 import {toReadableDate} from '../../utils/dateUtils';
+import {StudentStackParamList} from '../../types/navigation';
+
+type Props = NativeStackScreenProps<StudentStackParamList, 'MyActivities'>;
 
 const scoreLabel = (
   activity: ActivityRecord,
@@ -24,31 +28,37 @@ const scoreLabel = (
     ? `${submission.score} / ${activity.totalPoints}`
     : `- / ${activity.totalPoints}`;
 
-export const MyActivitiesScreen = () => {
+export const MyActivitiesScreen = ({navigation}: Props) => {
   const {profile, student} = useAuth();
   const [activities, setActivities] = useState<ActivityRecord[]>([]);
   const [submissions, setSubmissions] = useState<ActivitySubmissionRecord[]>(
     [],
   );
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   const load = useCallback(async () => {
     const classIds = profile?.classIds?.length
       ? profile.classIds
       : student?.classIds || [];
     const studentId = profile?.studentId || student?.id;
-    const [nextActivities, nextSubmissions] = await Promise.all([
-      getActivitiesForClasses(classIds),
-      studentId ? getSubmissionsByStudent(studentId) : Promise.resolve([]),
-    ]);
-    setActivities(nextActivities);
-    setSubmissions(nextSubmissions);
-    setLoading(false);
+    setLoading(true);
+    setError('');
+    try {
+      const [nextActivities, nextSubmissions] = await Promise.all([
+        getActivitiesForClasses(classIds),
+        studentId ? getSubmissionsByStudent(studentId) : Promise.resolve([]),
+      ]);
+      setActivities(nextActivities);
+      setSubmissions(nextSubmissions);
+    } catch {
+      setError('We could not load your activities. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   }, [profile, student]);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  useEffect(() => navigation.addListener('focus', load), [load, navigation]);
 
   const submissionByActivity = useMemo(
     () => Object.fromEntries(submissions.map(item => [item.activityId, item])),
@@ -57,6 +67,23 @@ export const MyActivitiesScreen = () => {
 
   if (loading) {
     return <LoadingState label="Loading activities..." />;
+  }
+
+  if (error) {
+    return (
+      <Screen>
+        <AppHeader
+          title="My Activities"
+          subtitle="Track complied, missing, late, and scored activities."
+        />
+        <EmptyState
+          title="Unable to load activities"
+          message={error}
+          actionLabel="Try again"
+          onAction={load}
+        />
+      </Screen>
+    );
   }
 
   return (
@@ -73,6 +100,7 @@ export const MyActivitiesScreen = () => {
         activities.map(activity => {
           const submission = submissionByActivity[activity.id];
           const status = submission?.status || 'missing';
+          const submissionLocked = typeof submission?.score === 'number';
           return (
             <AppCard key={activity.id} style={styles.activityCard}>
               <View style={styles.topRow}>
@@ -111,6 +139,74 @@ export const MyActivitiesScreen = () => {
                   </Text>
                 </View>
               </View>
+
+              {activity.acceptsImageAttachments && submissionLocked ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`View submitted images for ${activity.title}`}
+                  onPress={() =>
+                    navigation.navigate('SubmitActivity', {activity})
+                  }
+                  style={({pressed}) => [
+                    styles.lockedAction,
+                    pressed && styles.pressed,
+                  ]}>
+                  <View style={styles.lockedIcon}>
+                    <MaterialCommunityIcons
+                      name="lock-check-outline"
+                      size={20}
+                      color="#64748B"
+                    />
+                  </View>
+                  <View style={styles.submitCopy}>
+                    <Text style={styles.lockedTitle}>
+                      View submitted images
+                    </Text>
+                    <Text style={styles.submitSubtitle}>
+                      Your teacher has already scored this activity.
+                    </Text>
+                  </View>
+                  <MaterialCommunityIcons
+                    name="chevron-right"
+                    size={22}
+                    color="#52617E"
+                  />
+                </Pressable>
+              ) : activity.acceptsImageAttachments ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Submit images for ${activity.title}`}
+                  onPress={() =>
+                    navigation.navigate('SubmitActivity', {activity})
+                  }
+                  style={({pressed}) => [
+                    styles.submitAction,
+                    pressed && styles.pressed,
+                  ]}>
+                  <View style={styles.submitIcon}>
+                    <MaterialCommunityIcons
+                      name="image-plus"
+                      size={20}
+                      color="#2563EB"
+                    />
+                  </View>
+                  <View style={styles.submitCopy}>
+                    <Text style={styles.submitTitle}>
+                      {submission?.attachments?.length
+                        ? 'View or replace images'
+                        : 'Submit images'}
+                    </Text>
+                    <Text style={styles.submitSubtitle}>
+                      Attach photos of your completed work.
+                    </Text>
+                  </View>
+                  <MaterialCommunityIcons
+                    name="chevron-right"
+                    size={22}
+                    color="#52617E"
+                  />
+                </Pressable>
+              ) : null}
 
               {submission?.remarks ? (
                 <View style={styles.remarksBox}>
@@ -177,6 +273,31 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     marginTop: 4,
   },
+  lockedAction: {
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 12,
+    minHeight: 66,
+    padding: 10,
+  },
+  lockedIcon: {
+    alignItems: 'center',
+    backgroundColor: '#E2E8F0',
+    borderRadius: 12,
+    height: 38,
+    justifyContent: 'center',
+    width: 38,
+  },
+  lockedTitle: {
+    color: '#334155',
+    fontSize: 14,
+    fontWeight: '900',
+  },
   remarks: {
     color: '#3B4968',
     fontSize: 13,
@@ -189,6 +310,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginTop: 12,
     padding: 12,
+  },
+  pressed: {
+    opacity: 0.78,
   },
   remarksLabel: {
     color: '#52617E',
@@ -210,6 +334,41 @@ const styles = StyleSheet.create({
   sectionTitle: {
     color: '#081638',
     fontSize: 18,
+    fontWeight: '900',
+  },
+  submitAction: {
+    alignItems: 'center',
+    backgroundColor: '#F8FAFF',
+    borderColor: '#DCE8FF',
+    borderRadius: 12,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 12,
+    minHeight: 66,
+    padding: 10,
+  },
+  submitCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  submitIcon: {
+    alignItems: 'center',
+    backgroundColor: '#E8F1FF',
+    borderRadius: 12,
+    height: 38,
+    justifyContent: 'center',
+    width: 38,
+  },
+  submitSubtitle: {
+    color: '#52617E',
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  submitTitle: {
+    color: '#174EA6',
+    fontSize: 14,
     fontWeight: '900',
   },
   title: {

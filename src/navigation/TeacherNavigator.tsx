@@ -1,11 +1,9 @@
 import React from 'react';
+import {StyleSheet, View} from 'react-native';
 import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import {
-  TeacherStackParamList,
-  TeacherTabParamList,
-} from '../types/navigation';
+import {TeacherStackParamList, TeacherTabParamList} from '../types/navigation';
 import {TeacherDashboardScreen} from '../screens/teacher/TeacherDashboardScreen';
 import {ClassListScreen} from '../screens/teacher/ClassListScreen';
 import {AddClassScreen} from '../screens/teacher/AddClassScreen';
@@ -24,11 +22,14 @@ import {AttendanceStatusListScreen} from '../screens/teacher/AttendanceStatusLis
 import {ActivityHomeScreen} from '../screens/teacher/ActivityHomeScreen';
 import {ActivityListScreen} from '../screens/teacher/ActivityListScreen';
 import {CreateActivityScreen} from '../screens/teacher/CreateActivityScreen';
+import {EditActivityScreen} from '../screens/teacher/EditActivityScreen';
 import {ActivityDetailsScreen} from '../screens/teacher/ActivityDetailsScreen';
 import {ScoreEncodingScreen} from '../screens/teacher/ScoreEncodingScreen';
 import {ActivityHistoryScreen} from '../screens/teacher/ActivityHistoryScreen';
 import {ReportsScreen} from '../screens/teacher/ReportsScreen';
 import {AnnouncementsScreen} from '../screens/teacher/AnnouncementsScreen';
+import {AnnouncementHistoryScreen} from '../screens/teacher/AnnouncementHistoryScreen';
+import {EditAnnouncementScreen} from '../screens/teacher/EditAnnouncementScreen';
 import {SettingsScreen} from '../screens/teacher/SettingsScreen';
 import {MoreScreen} from '../screens/teacher/MoreScreen';
 import {AboutAppScreen} from '../screens/teacher/AboutAppScreen';
@@ -77,11 +78,17 @@ const TeacherStack = ({initialRouteName}: TeacherStackProps) => (
     <Stack.Screen name="ActivityHome" component={ActivityHomeScreen} />
     <Stack.Screen name="ActivityList" component={ActivityListScreen} />
     <Stack.Screen name="CreateActivity" component={CreateActivityScreen} />
+    <Stack.Screen name="EditActivity" component={EditActivityScreen} />
     <Stack.Screen name="ActivityDetails" component={ActivityDetailsScreen} />
     <Stack.Screen name="ScoreEncoding" component={ScoreEncodingScreen} />
     <Stack.Screen name="ActivityHistory" component={ActivityHistoryScreen} />
     <Stack.Screen name="Reports" component={ReportsScreen} />
     <Stack.Screen name="Announcements" component={AnnouncementsScreen} />
+    <Stack.Screen
+      name="AnnouncementHistory"
+      component={AnnouncementHistoryScreen}
+    />
+    <Stack.Screen name="EditAnnouncement" component={EditAnnouncementScreen} />
     <Stack.Screen name="Settings" component={SettingsScreen} />
     <Stack.Screen name="AboutApp" component={AboutAppScreen} />
     <Stack.Screen name="HelpSupport" component={HelpSupportScreen} />
@@ -89,54 +96,63 @@ const TeacherStack = ({initialRouteName}: TeacherStackProps) => (
 );
 
 const DashboardStack = () => <TeacherStack initialRouteName="TeacherHome" />;
-const AttendanceStack = () => <TeacherStack initialRouteName="AttendanceHome" />;
+const StudentsStack = () => <TeacherStack initialRouteName="StudentList" />;
 const ClassesStack = () => <TeacherStack initialRouteName="ClassList" />;
-const ActivitiesStack = () => <TeacherStack initialRouteName="ActivityHome" />;
+const ReportsStack = () => <TeacherStack initialRouteName="Reports" />;
 const MoreStack = () => <TeacherStack initialRouteName="MoreHome" />;
 
 type TabIconProps = {
   color: string;
+  focused: boolean;
   size: number;
 };
 
 const TeacherTabIcon = ({
   color,
+  focused,
   icon,
   size,
 }: TabIconProps & {icon: string}) => (
-  <MaterialCommunityIcons name={icon} size={size} color={color} />
+  <View style={[styles.tabIcon, focused && styles.tabIconActive]}>
+    <MaterialCommunityIcons
+      name={icon}
+      size={focused ? 25 : Math.min(size, 24)}
+      color={color}
+    />
+  </View>
 );
 
 const DashboardTabIcon = (props: TabIconProps) => (
   <TeacherTabIcon {...props} icon="home" />
 );
 
-const AttendanceTabIcon = (props: TabIconProps) => (
-  <TeacherTabIcon {...props} icon="calendar-check-outline" />
+const StudentsTabIcon = (props: TabIconProps) => (
+  <TeacherTabIcon {...props} icon="account-group" />
 );
 
 const ClassesTabIcon = (props: TabIconProps) => (
-  <TeacherTabIcon {...props} icon="school-outline" />
+  <TeacherTabIcon {...props} icon="book-open-variant" />
 );
 
-const ActivitiesTabIcon = (props: TabIconProps) => (
-  <TeacherTabIcon {...props} icon="clipboard-list-outline" />
+const ReportsTabIcon = (props: TabIconProps) => (
+  <TeacherTabIcon {...props} icon="chart-box" />
 );
 
 const MoreTabIcon = (props: TabIconProps) => (
-  <TeacherTabIcon {...props} icon="dots-horizontal" />
+  <TeacherTabIcon {...props} icon="menu" />
 );
 
 const tabLabelStyle = {
   fontSize: 12,
-  fontWeight: '800' as const,
+  fontWeight: '700' as const,
+  marginTop: -3,
 };
 
 const tabBarStyle = {
   backgroundColor: '#FFFFFF',
-  borderTopColor: '#EEF2F7',
-  minHeight: 70,
-  paddingBottom: 10,
+  borderTopColor: '#F1F4F9',
+  height: 76,
+  paddingBottom: 6,
   paddingTop: 8,
 };
 
@@ -145,19 +161,20 @@ export const TeacherNavigator = () => (
     screenOptions={{
       headerShown: false,
       tabBarActiveTintColor: colors.primary,
-      tabBarInactiveTintColor: '#5C667D',
+      tabBarInactiveTintColor: '#7181A0',
+      tabBarIconStyle: {marginTop: 0},
       tabBarLabelStyle: tabLabelStyle,
       tabBarStyle,
     }}>
     <Tab.Screen
       name="DashboardTab"
       component={DashboardStack}
-      options={{title: 'Dashboard', tabBarIcon: DashboardTabIcon}}
+      options={{title: 'Home', tabBarIcon: DashboardTabIcon}}
     />
     <Tab.Screen
-      name="AttendanceTab"
-      component={AttendanceStack}
-      options={{title: 'Attendance', tabBarIcon: AttendanceTabIcon}}
+      name="StudentsTab"
+      component={StudentsStack}
+      options={{title: 'Students', tabBarIcon: StudentsTabIcon}}
     />
     <Tab.Screen
       name="ClassesTab"
@@ -165,9 +182,9 @@ export const TeacherNavigator = () => (
       options={{title: 'Classes', tabBarIcon: ClassesTabIcon}}
     />
     <Tab.Screen
-      name="ActivitiesTab"
-      component={ActivitiesStack}
-      options={{title: 'Activities', tabBarIcon: ActivitiesTabIcon}}
+      name="ReportsTab"
+      component={ReportsStack}
+      options={{title: 'Reports', tabBarIcon: ReportsTabIcon}}
     />
     <Tab.Screen
       name="MoreTab"
@@ -176,3 +193,16 @@ export const TeacherNavigator = () => (
     />
   </Tab.Navigator>
 );
+
+const styles = StyleSheet.create({
+  tabIcon: {
+    alignItems: 'center',
+    borderRadius: 14,
+    height: 42,
+    justifyContent: 'center',
+    width: 52,
+  },
+  tabIconActive: {
+    backgroundColor: '#E8F0FF',
+  },
+});

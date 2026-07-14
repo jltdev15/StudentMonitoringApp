@@ -65,6 +65,21 @@ service cloud.firestore {
       return isTeacher() && request.resource.data.teacherId == request.auth.uid;
     }
 
+    function activityForSubmission() {
+      return get(/databases/$(database)/documents/activities/$(request.resource.data.activityId)).data;
+    }
+
+    function isStudentImageSubmission() {
+      return isStudent()
+        && request.resource.data.studentId == currentUser().studentId
+        && request.resource.data.classId == activityForSubmission().classId
+        && activityForSubmission().status == 'active'
+        && activityForSubmission().acceptsImageAttachments == true
+        && request.resource.data.classId in currentUser().classIds
+        && request.resource.data.attachments is list
+        && request.resource.data.status in ['submitted', 'late'];
+    }
+
     match /users/{userId} {
       allow read: if signedIn() && (
         userId == request.auth.uid
@@ -122,13 +137,26 @@ service cloud.firestore {
     match /activities/{activityId} {
       allow read: if isTeacher() || (isStudent() && resource.data.classId in currentUser().classIds);
       allow create, update: if ownsClass(request.resource.data.classId);
-      allow delete: if false;
+      allow delete: if ownsClass(resource.data.classId);
     }
 
     match /activitySubmissions/{submissionId} {
       allow read: if isTeacher() || isOwnStudentRecord(resource.data.studentId);
-      allow create, update: if ownsClass(request.resource.data.classId);
-      allow delete: if false;
+      allow create: if ownsClass(request.resource.data.classId)
+        || (
+          isStudentImageSubmission()
+          && request.resource.data.score == null
+          && request.resource.data.remarks == ''
+          && request.resource.data.checkedBy == ''
+        );
+      allow update: if ownsClass(request.resource.data.classId)
+        || (
+          isStudentImageSubmission()
+          && resource.data.score == null
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['attachments', 'status', 'submittedAt', 'updatedAt'])
+        );
+      allow delete: if ownsClass(resource.data.classId);
     }
 
     match /announcements/{announcementId} {
@@ -138,12 +166,16 @@ service cloud.firestore {
           && resource.data.targetRole in ['all', 'students']
           && (resource.data.classId == null || resource.data.classId in currentUser().classIds)
         );
-      allow create, update: if isTeacher()
+      allow create: if isTeacher()
         && request.resource.data.postedBy == request.auth.uid
         && (
           request.resource.data.classId == null
           || ownsClass(request.resource.data.classId)
         );
+      allow update: if isTeacher()
+        && resource.data.postedBy == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['title', 'message', 'updatedAt']);
       allow delete: if false;
     }
   }

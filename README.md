@@ -1,4 +1,4 @@
-# ICT Portal
+# Class Tracker
 
 React Native CLI + Firebase mobile app for student attendance and activity monitoring. The MVP supports teacher and student roles, protected login, class management, student records, attendance, activities, scores, reports, and announcements.
 

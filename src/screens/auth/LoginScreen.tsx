@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, {useEffect, useState} from 'react';
 import {
   Image,
   Pressable,
@@ -26,6 +26,8 @@ export const LoginScreen = ({navigation}: Props) => {
   const [password, setPassword] = useState('');
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [error, setError] = useState('');
+  const [verificationDismissed, setVerificationDismissed] = useState(false);
+  const [verificationRequired, setVerificationRequired] = useState(false);
   const isShortScreen = height < 740;
   const isNarrowScreen = width < 380;
 
@@ -41,6 +43,19 @@ export const LoginScreen = ({navigation}: Props) => {
   const inputHeightStyle = {minHeight: inputMinHeight};
   const loginButtonHeightStyle = {minHeight: loginButtonHeight};
   const logoSizeStyle = {height: logoSize, width: logoSize};
+  const hasVerificationAuthError = Boolean(
+    authError?.includes('verify your email'),
+  );
+  const showVerificationSection =
+    (verificationRequired || hasVerificationAuthError) && !verificationDismissed;
+  const formError = hasVerificationAuthError ? error : error || authError || '';
+
+  useEffect(() => {
+    if (hasVerificationAuthError) {
+      setVerificationRequired(true);
+      setVerificationDismissed(false);
+    }
+  }, [hasVerificationAuthError]);
 
   const handleLogin = async () => {
     if (!isEmail(email)) {
@@ -52,6 +67,8 @@ export const LoginScreen = ({navigation}: Props) => {
       return;
     }
     setError('');
+    setVerificationDismissed(false);
+    setVerificationRequired(false);
     try {
       await signIn(email, password);
     } catch {
@@ -69,9 +86,92 @@ export const LoginScreen = ({navigation}: Props) => {
       await resendVerification(email, password);
       setError('Verification email resent. Please check your inbox.');
     } catch {
-      // AuthContext handles error
+      setError('Could not resend the verification email. Please try again.');
     }
   };
+
+  if (showVerificationSection) {
+    const resendSucceeded = error.includes('Verification email resent');
+    return (
+      <Screen
+        style={[
+          styles.content,
+          styles.verificationContent,
+          isShortScreen && styles.contentShort,
+          isNarrowScreen && styles.contentNarrow,
+          contentMinHeightStyle,
+        ]}>
+        <View
+          style={[
+            styles.backgroundDotGrid,
+            isShortScreen && styles.backgroundDotGridShort,
+            isNarrowScreen && styles.backgroundDotGridNarrow,
+          ]}>
+          {Array.from({length: 9}).map((_, index) => (
+            <View key={index} style={styles.backgroundDot} />
+          ))}
+        </View>
+        <View
+          style={[
+            styles.backgroundCircle,
+            isShortScreen && styles.backgroundCircleShort,
+          ]}
+        />
+        <View style={[styles.brand, isShortScreen && styles.brandShort]}>
+          <Image
+            source={classTrackLogo}
+            style={[styles.logoImage, logoSizeStyle]}
+            resizeMode="contain"
+          />
+        </View>
+        <View style={styles.verificationCard}>
+          <View style={styles.verificationIcon}>
+            <MaterialCommunityIcons
+              name="email-check-outline"
+              size={38}
+              color="#2563EB"
+            />
+          </View>
+          <Text style={styles.verificationTitle}>Verify your email</Text>
+          <Text style={styles.verificationMessage}>
+            Please verify your email address before logging in.
+          </Text>
+          {error ? (
+            <Text
+              style={[
+                styles.verificationFeedback,
+                resendSucceeded
+                  ? styles.verificationSuccess
+                  : styles.verificationError,
+              ]}>
+              {error}
+            </Text>
+          ) : null}
+          <Button
+            mode="contained"
+            disabled={loading}
+            onPress={handleResend}
+            buttonColor="#075FE4"
+            textColor="#FFFFFF"
+            style={styles.verificationButton}
+            contentStyle={styles.verificationButtonContent}
+            labelStyle={styles.loginButtonLabel}>
+            {loading ? 'Sending email...' : 'Resend Verification Email'}
+          </Button>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => {
+              setError('');
+              setVerificationDismissed(true);
+              setVerificationRequired(false);
+            }}
+            style={styles.useAnotherAccountButton}>
+            <Text style={styles.useAnotherAccountText}>Use another account</Text>
+          </Pressable>
+        </View>
+      </Screen>
+    );
+  }
 
   return (
     <Screen
@@ -194,24 +294,17 @@ export const LoginScreen = ({navigation}: Props) => {
 
         <HelperText
           type="error"
-          visible={Boolean(error || authError)}
+          visible={Boolean(formError)}
           style={styles.helperText}>
-          {error || authError || ' '}
+          {formError || ' '}
         </HelperText>
         
-        {authError?.includes('verify your email') ? (
-          <Pressable style={styles.forgotButton} onPress={handleResend} disabled={loading}>
-            <Text style={styles.forgotText}>Resend Verification Email</Text>
-          </Pressable>
-        ) : (
-          <Pressable style={styles.forgotButton}>
-            <Text style={styles.forgotText}>Forgot Password?</Text>
-          </Pressable>
-        )}
+        <Pressable style={styles.forgotButton}>
+          <Text style={styles.forgotText}>Forgot Password?</Text>
+        </Pressable>
 
         <Button
           mode="contained"
-          loading={loading}
           disabled={loading}
           onPress={handleLogin}
           buttonColor="#075FE4"
@@ -222,7 +315,7 @@ export const LoginScreen = ({navigation}: Props) => {
             loginButtonHeightStyle,
           ]}
           labelStyle={styles.loginButtonLabel}>
-          Login
+          {loading ? 'Signing in...' : 'Login'}
         </Button>
 
         <View
@@ -372,6 +465,75 @@ const styles = StyleSheet.create({
   },
   contentShort: {
     paddingTop: 8,
+  },
+  useAnotherAccountButton: {
+    alignSelf: 'center',
+    marginTop: 18,
+    padding: 6,
+  },
+  useAnotherAccountText: {
+    color: '#2563EB',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  verificationButton: {
+    alignSelf: 'stretch',
+    marginTop: 18,
+  },
+  verificationButtonContent: {
+    minHeight: 56,
+  },
+  verificationCard: {
+    alignItems: 'center',
+    alignSelf: 'stretch',
+    backgroundColor: '#FFFFFF',
+    borderColor: '#DDE8F8',
+    borderRadius: 18,
+    borderWidth: 1,
+    elevation: 4,
+    padding: 24,
+    shadowColor: '#7685A3',
+    shadowOffset: {height: 8, width: 0},
+    shadowOpacity: 0.12,
+    shadowRadius: 18,
+  },
+  verificationContent: {
+    justifyContent: 'center',
+  },
+  verificationError: {
+    color: '#B91C1C',
+  },
+  verificationFeedback: {
+    fontSize: 14,
+    fontWeight: '700',
+    lineHeight: 20,
+    marginTop: 16,
+    textAlign: 'center',
+  },
+  verificationIcon: {
+    alignItems: 'center',
+    backgroundColor: '#E8F1FF',
+    borderRadius: 22,
+    height: 72,
+    justifyContent: 'center',
+    width: 72,
+  },
+  verificationMessage: {
+    color: '#52617E',
+    fontSize: 15,
+    fontWeight: '600',
+    lineHeight: 22,
+    marginTop: 10,
+    textAlign: 'center',
+  },
+  verificationSuccess: {
+    color: '#15803D',
+  },
+  verificationTitle: {
+    color: '#081638',
+    fontSize: 22,
+    fontWeight: '900',
+    marginTop: 18,
   },
   eyeButton: {
     alignItems: 'center',

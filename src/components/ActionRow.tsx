@@ -22,7 +22,7 @@ export const ActionRow = ({label, icon, onPress, primary = false}: Props) => (
     <View style={[styles.iconWrap, primary && styles.primaryIconWrap]}>
       <MaterialCommunityIcons
         name={icon}
-        size={26}
+        size={24}
         color={primary ? '#2563EB' : '#2563EB'}
       />
     </View>
@@ -33,7 +33,7 @@ export const ActionRow = ({label, icon, onPress, primary = false}: Props) => (
     </Text>
     <MaterialCommunityIcons
       name="chevron-right"
-      size={30}
+      size={24}
       color={primary ? '#FFFFFF' : '#52617E'}
     />
   </Pressable>
@@ -43,19 +43,20 @@ const styles = StyleSheet.create({
   iconWrap: {
     alignItems: 'center',
     backgroundColor: '#EEF5FF',
-    borderRadius: 16,
-    height: 52,
+    borderRadius: 14,
+    height: 48,
     justifyContent: 'center',
-    width: 52,
+    width: 48,
   },
   label: {
     color: '#06143A',
     flex: 1,
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '900',
   },
   pressed: {
     opacity: 0.82,
+    transform: [{scale: 0.985}],
   },
   primaryIconWrap: {
     backgroundColor: '#FFFFFF',
@@ -70,17 +71,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
     borderColor: '#EEF2F7',
-    borderRadius: 14,
+    borderRadius: 20,
     borderWidth: 1,
     elevation: 3,
     flexDirection: 'row',
-    gap: 14,
-    marginBottom: 14,
-    minHeight: 72,
-    paddingHorizontal: 16,
+    gap: 12,
+    marginBottom: 12,
+    minHeight: 70,
+    paddingHorizontal: 14,
     shadowColor: '#7685A3',
-    shadowOffset: {height: 8, width: 0},
-    shadowOpacity: 0.1,
-    shadowRadius: 18,
+    shadowOffset: {height: 5, width: 0},
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
   },
 });

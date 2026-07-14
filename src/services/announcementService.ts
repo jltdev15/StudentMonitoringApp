@@ -2,6 +2,7 @@ import {
   getDocs,
   query,
   setDoc,
+  updateDoc,
   where,
 } from '@react-native-firebase/firestore';
 import {collections} from '../config/firebase';
@@ -11,6 +12,11 @@ import {col, docRef, mapDoc, now} from './firestoreHelpers';
 export type AnnouncementInput = Omit<
   AnnouncementRecord,
   'id' | 'createdAt' | 'updatedAt'
+>;
+
+export type AnnouncementUpdateInput = Pick<
+  AnnouncementRecord,
+  'message' | 'title'
 >;
 
 export const createAnnouncement = async (payload: AnnouncementInput) => {
@@ -23,7 +29,25 @@ export const getTeacherAnnouncements = async (teacherId: string) => {
   const snapshot = await getDocs(
     query(col(collections.announcements), where('postedBy', '==', teacherId)),
   );
-  return snapshot.docs.map(doc => mapDoc<AnnouncementRecord>(doc));
+  return snapshot.docs
+    .map(doc => mapDoc<AnnouncementRecord>(doc))
+    .sort((first, second) => announcementTime(second) - announcementTime(first));
+};
+
+export const updateAnnouncement = async (
+  announcementId: string,
+  payload: AnnouncementUpdateInput,
+) => updateDoc(docRef(collections.announcements, announcementId), {
+  ...payload,
+  updatedAt: now(),
+});
+
+const announcementTime = (announcement: AnnouncementRecord) => {
+  const value = announcement.createdAt;
+  if (!value) {
+    return 0;
+  }
+  return 'toMillis' in value ? value.toMillis() : value.getTime();
 };
 
 export const getAnnouncementsForStudent = async (classIds: string[]) => {

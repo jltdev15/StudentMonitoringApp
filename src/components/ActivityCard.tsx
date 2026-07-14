@@ -40,23 +40,23 @@ export const ActivityCard = ({activity, onPress}: Props) => (
 
 const styles = StyleSheet.create({
   description: {
-    color: '#3B4968',
-    fontSize: 14,
-    lineHeight: 20,
-    marginTop: 10,
+    color: '#7181A0',
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: 9,
   },
   iconWrap: {
     alignItems: 'center',
     backgroundColor: '#EAF2FF',
-    borderRadius: 26,
-    height: 52,
+    borderRadius: 15,
+    height: 48,
     justifyContent: 'center',
     marginRight: 14,
-    width: 52,
+    width: 48,
   },
   meta: {
-    color: '#3B4968',
-    fontSize: 14,
+    color: '#7181A0',
+    fontSize: 13,
     fontWeight: '600',
     marginTop: 4,
   },
@@ -69,8 +69,8 @@ const styles = StyleSheet.create({
     paddingRight: 8,
   },
   title: {
-    color: '#081638',
-    fontSize: 18,
+    color: '#112B5D',
+    fontSize: 16,
     fontWeight: '900',
   },
 });

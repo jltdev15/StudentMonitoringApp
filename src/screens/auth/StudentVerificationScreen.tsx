@@ -116,14 +116,13 @@ export const StudentVerificationScreen = ({navigation}: Props) => {
 
         <Button
           mode="contained"
-          loading={loading}
           disabled={loading}
           onPress={handleVerify}
           buttonColor="#075FE4"
           textColor="#FFFFFF"
           contentStyle={styles.primaryButtonContent}
           labelStyle={styles.primaryButtonLabel}>
-          Verify Identity
+          {loading ? 'Verifying identity...' : 'Verify Identity'}
         </Button>
 
         <Pressable

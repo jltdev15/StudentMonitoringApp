@@ -1,14 +1,16 @@
 import React from 'react';
 import {StyleSheet, View} from 'react-native';
-import {Text} from 'react-native-paper';
+import {Button, Text} from 'react-native-paper';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 
 type Props = {
   title: string;
   message?: string;
+  actionLabel?: string;
+  onAction?: () => void;
 };
 
-export const EmptyState = ({title, message}: Props) => (
+export const EmptyState = ({title, message, actionLabel, onAction}: Props) => (
   <View style={styles.container}>
     <View style={styles.artwork}>
       <View style={styles.artworkCircle} />
@@ -31,23 +33,31 @@ export const EmptyState = ({title, message}: Props) => (
         {message}
       </Text>
     ) : null}
+    {actionLabel && onAction ? (
+      <Button mode="outlined" onPress={onAction} style={styles.action}>
+        {actionLabel}
+      </Button>
+    ) : null}
   </View>
 );
 
 const styles = StyleSheet.create({
+  action: {
+    marginTop: 16,
+  },
   container: {
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    borderColor: '#EEF2F7',
-    borderRadius: 14,
+    borderColor: '#EEF3FA',
+    borderRadius: 20,
     borderWidth: 1,
     elevation: 3,
     marginBottom: 14,
-    padding: 24,
+    padding: 22,
     shadowColor: '#7685A3',
-    shadowOffset: {height: 8, width: 0},
-    shadowOpacity: 0.1,
-    shadowRadius: 18,
+    shadowOffset: {height: 5, width: 0},
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
   },
   artwork: {
     alignItems: 'center',
@@ -77,8 +87,8 @@ const styles = StyleSheet.create({
     right: 26,
   },
   title: {
-    color: '#06143A',
-    fontSize: 20,
+    color: '#112B5D',
+    fontSize: 19,
     fontWeight: '900',
     marginTop: 8,
     textAlign: 'center',

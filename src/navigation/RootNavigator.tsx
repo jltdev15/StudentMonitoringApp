@@ -3,15 +3,25 @@ import {NavigationContainer} from '@react-navigation/native';
 import {View} from 'react-native';
 import {Button, Text} from 'react-native-paper';
 import {LoadingState} from '../components/LoadingState';
+import {StudentNotificationManager} from '../components/StudentNotificationManager';
 import {useAuth} from '../context/AuthContext';
 import {AuthNavigator} from './AuthNavigator';
 import {StudentNavigator} from './StudentNavigator';
 import {TeacherNavigator} from './TeacherNavigator';
+import {navigationRef} from './navigationRef';
 
 export const RootNavigator = () => {
-  const {firebaseUser, profile, initializing, authError, signOut} = useAuth();
+  const {
+    firebaseUser,
+    profile,
+    student,
+    initializing,
+    profileLoading,
+    authError,
+    signOut,
+  } = useAuth();
 
-  if (initializing) {
+  if (initializing || (firebaseUser && profileLoading)) {
     return <LoadingState label="Preparing your classroom..." />;
   }
 
@@ -23,6 +33,9 @@ export const RootNavigator = () => {
       return <TeacherNavigator />;
     }
     if (profile?.role === 'student') {
+      if (!firebaseUser.emailVerified) {
+        return <AuthNavigator />;
+      }
       return <StudentNavigator />;
     }
     return (
@@ -45,5 +58,17 @@ export const RootNavigator = () => {
     );
   };
 
-  return <NavigationContainer>{renderNavigator()}</NavigationContainer>;
+  const isVerifiedStudent =
+    profile?.role === 'student' && firebaseUser?.emailVerified;
+
+  return (
+    <>
+      <NavigationContainer ref={navigationRef}>
+        {renderNavigator()}
+      </NavigationContainer>
+      {isVerifiedStudent && profile ? (
+        <StudentNotificationManager profile={profile} student={student} />
+      ) : null}
+    </>
+  );
 };

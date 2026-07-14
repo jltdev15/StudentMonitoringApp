@@ -1,0 +1,52 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function userProfile() {
+      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function activity(activityId) {
+      return firestore.get(/databases/(default)/documents/activities/$(activityId)).data;
+    }
+
+    function classRecord(classId) {
+      return firestore.get(/databases/(default)/documents/classes/$(classId)).data;
+    }
+
+    function isEnrolledStudent(activityId, studentId) {
+      return signedIn()
+        && userProfile().role == 'student'
+        && userProfile().status == 'active'
+        && userProfile().studentId == studentId
+        && activity(activityId).classId in userProfile().classIds;
+    }
+
+    function isSubmittingStudent(activityId, studentId) {
+      return isEnrolledStudent(activityId, studentId)
+        && activity(activityId).status == 'active'
+        && activity(activityId).acceptsImageAttachments == true;
+    }
+
+    function isActivityTeacher(activityId) {
+      return signedIn()
+        && userProfile().role == 'teacher'
+        && userProfile().status == 'active'
+        && classRecord(activity(activityId).classId).teacherId == request.auth.uid;
+    }
+
+    match /activity-submissions/{activityId}/{studentId}/{fileName} {
+      allow read: if isEnrolledStudent(activityId, studentId)
+        || isActivityTeacher(activityId);
+      allow create, update: if isSubmittingStudent(activityId, studentId)
+        && request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+      allow delete: if isEnrolledStudent(activityId, studentId)
+        || isActivityTeacher(activityId);
+    }
+  }
+}

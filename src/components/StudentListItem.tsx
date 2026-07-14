@@ -9,12 +9,20 @@ import {StatusBadge} from './StatusBadge';
 type Props = {
   student: StudentRecord;
   onPress?: () => void;
+  variant?: 'default' | 'teacher';
 };
 
-export const StudentListItem = ({student, onPress}: Props) => (
-  <AppCard onPress={onPress}>
+export const StudentListItem = ({
+  student,
+  onPress,
+  variant = 'default',
+}: Props) => (
+  <AppCard
+    onPress={onPress}
+    style={variant === 'teacher' ? styles.teacherCard : undefined}>
     <View style={styles.row}>
-      <View style={styles.avatar}>
+      <View
+        style={[styles.avatar, variant === 'teacher' && styles.teacherAvatar]}>
         <MaterialCommunityIcons
           name="account-outline"
           size={28}
@@ -22,7 +30,9 @@ export const StudentListItem = ({student, onPress}: Props) => (
         />
       </View>
       <View style={styles.text}>
-        <Text variant="titleMedium" style={styles.name}>
+        <Text
+          variant="titleMedium"
+          style={[styles.name, variant === 'teacher' && styles.teacherName]}>
           {student.fullName}
         </Text>
         <Text style={styles.meta}>
@@ -63,4 +73,16 @@ const styles = StyleSheet.create({
     marginRight: 14,
     width: 52,
   },
+  teacherAvatar: {
+    borderRadius: 15,
+    height: 48,
+    width: 48,
+  },
+  teacherCard: {
+    borderColor: '#EEF3FA',
+    borderRadius: 20,
+    marginBottom: 13,
+    padding: 15,
+  },
+  teacherName: {color: '#112B5D', fontSize: 16},
 });

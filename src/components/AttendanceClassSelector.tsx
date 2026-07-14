@@ -142,8 +142,8 @@ const styles = StyleSheet.create({
   classCard: {
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    borderColor: '#EEF2F7',
-    borderRadius: 14,
+    borderColor: '#EEF3FA',
+    borderRadius: 20,
     borderWidth: 1,
     elevation: 2,
     flexDirection: 'row',
@@ -151,9 +151,9 @@ const styles = StyleSheet.create({
     minHeight: 74,
     padding: 14,
     shadowColor: '#7685A3',
-    shadowOffset: {height: 8, width: 0},
+    shadowOffset: {height: 5, width: 0},
     shadowOpacity: 0.08,
-    shadowRadius: 16,
+    shadowRadius: 12,
   },
   classCardSelected: {
     borderColor: colors.primary,

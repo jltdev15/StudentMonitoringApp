@@ -7,109 +7,103 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native';
-import {CommonActions} from '@react-navigation/native';
 import {NativeStackScreenProps} from '@react-navigation/native-stack';
 import {Text} from 'react-native-paper';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import {LoadingState} from '../../components/LoadingState';
 import {useAuth} from '../../context/AuthContext';
-import {
-  getActivitiesByClass,
-  getSubmissionsByActivity,
-} from '../../services/activityService';
 import {getAttendanceByClassAndDate} from '../../services/attendanceService';
 import {getTeacherClasses} from '../../services/classService';
 import {countByStatus} from '../../services/reportService';
 import {getStudentsByClass} from '../../services/studentService';
-import {
-  ActivityRecord,
-  ActivitySubmissionRecord,
-  ClassRecord,
-} from '../../types/models';
-import {
-  TeacherStackParamList,
-  TeacherTabParamList,
-} from '../../types/navigation';
+import {TeacherStackParamList} from '../../types/navigation';
 import {colors} from '../../utils/constants';
-import {toDateString, toReadableDate} from '../../utils/dateUtils';
+import {toDateString} from '../../utils/dateUtils';
 
 type Props = NativeStackScreenProps<TeacherStackParamList, 'TeacherHome'>;
 type ActionRoute = 'Attendance' | 'CreateActivity' | 'AddStudent' | 'Reports';
-type TeacherTabRoute = keyof TeacherTabParamList;
+type StatKey = 'students' | 'present' | 'absent' | 'late';
 
-type ClassSummary = {
-  classItem: ClassRecord;
-  studentCount: number;
-  attendancePercent: number;
+type OverviewCard = {
+  key: StatKey;
+  label: string;
+  detail: string;
+  icon: string;
+  color: string;
+  tint: string;
 };
 
-type ActivitySummary = {
-  activity: ActivityRecord;
-  className: string;
-  completedSubmissions: number;
-  expectedSubmissions: number;
-};
-
-const overviewCards = [
+const overviewCards: OverviewCard[] = [
   {
     key: 'students',
     label: 'Students',
-    icon: 'account-group-outline',
-    color: '#13A464',
+    detail: 'Total enrolled',
+    icon: 'account-group',
+    color: '#2563EB',
+    tint: '#E9F0FF',
   },
   {
     key: 'present',
     label: 'Present',
+    detail: 'Today',
     icon: 'check-circle-outline',
     color: '#16A34A',
+    tint: '#E7F8EE',
   },
   {
     key: 'absent',
     label: 'Absent',
+    detail: 'Today',
     icon: 'account-remove-outline',
-    color: '#E31D35',
+    color: '#EF4444',
+    tint: '#FEEBED',
   },
   {
     key: 'late',
     label: 'Late',
+    detail: 'Today',
     icon: 'clock-outline',
-    color: '#F47C0B',
-  },
-] as const;
-
-const quickActions: {
-  label: string;
-  icon: string;
-  route: ActionRoute;
-  tab: TeacherTabRoute;
-}[] = [
-  {
-    label: 'Take Attendance',
-    icon: 'calendar-check-outline',
-    route: 'Attendance',
-    tab: 'AttendanceTab',
-  },
-  {
-    label: 'Create Activity',
-    icon: 'file-document-plus-outline',
-    route: 'CreateActivity',
-    tab: 'ActivitiesTab',
-  },
-  {
-    label: 'Add Student',
-    icon: 'account-plus',
-    route: 'AddStudent',
-    tab: 'MoreTab',
-  },
-  {
-    label: 'View Reports',
-    icon: 'chart-box-outline',
-    route: 'Reports',
-    tab: 'MoreTab',
+    color: '#F97316',
+    tint: '#FFF1E8',
   },
 ];
 
-const completedSubmissionStatuses = new Set(['submitted', 'late']);
+const quickActions: {
+  label: string;
+  description: string;
+  icon: string;
+  color: string;
+  route: ActionRoute;
+}[] = [
+  {
+    label: 'Take Attendance',
+    description: 'Mark students present',
+    icon: 'calendar-check-outline',
+    color: '#2563EB',
+    route: 'Attendance',
+  },
+  {
+    label: 'Create Activity',
+    description: 'Add class activity',
+    icon: 'plus',
+    color: '#7C3AED',
+    route: 'CreateActivity',
+  },
+  {
+    label: 'Add Student',
+    description: 'Enroll new student',
+    icon: 'account-plus-outline',
+    color: '#16A34A',
+    route: 'AddStudent',
+  },
+  {
+    label: 'View Reports',
+    description: 'Check class reports',
+    icon: 'chart-box-outline',
+    color: '#3B82F6',
+    route: 'Reports',
+  },
+];
 
 const getGreeting = () => {
   const hour = new Date().getHours();
@@ -122,37 +116,20 @@ const getGreeting = () => {
   return 'Good evening,';
 };
 
-const formatClassTitle = (classItem: ClassRecord) => {
-  if (classItem.gradeLevel && classItem.subject) {
-    return `${classItem.gradeLevel} - ${classItem.subject}`;
-  }
-  return classItem.className;
-};
-
-const getClassIcon = (index: number) =>
-  index % 2 === 0 ? 'xml' : 'book-open-variant';
-
 export const TeacherDashboardScreen = ({navigation}: Props) => {
   const {profile} = useAuth();
   const {width} = useWindowDimensions();
-  const isCompact = width < 420;
-  const isDashboardCompact = width < 560;
-  const isHeroCompact = width < 560;
-  const isHeroVeryCompact = width < 390;
-  const isVeryCompact = width < 360;
+  const isCompact = width < 380;
+  const isNarrow = width < 350;
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [stats, setStats] = useState({
+  const [error, setError] = useState('');
+  const [stats, setStats] = useState<Record<StatKey, number>>({
     students: 0,
     present: 0,
     absent: 0,
     late: 0,
   });
-  const [classSummaries, setClassSummaries] = useState<ClassSummary[]>([]);
-  const [recentActivities, setRecentActivities] = useState<ActivitySummary[]>(
-    [],
-  );
-  const [error, setError] = useState('');
 
   const today = useMemo(() => new Date(), []);
   const readableDate = today.toLocaleDateString(undefined, {
@@ -161,87 +138,35 @@ export const TeacherDashboardScreen = ({navigation}: Props) => {
     year: 'numeric',
   });
   const weekday = today.toLocaleDateString(undefined, {weekday: 'long'});
-  const scrollContentStyle = useMemo(
-    () => [styles.screen, {paddingBottom: 34}],
-    [],
-  );
 
   const load = useCallback(
     async (mode: 'initial' | 'refresh' = 'initial') => {
       if (!profile) {
+        setLoading(false);
         return;
       }
+
       if (mode === 'refresh') {
         setRefreshing(true);
       } else {
         setLoading(true);
       }
       setError('');
+
       try {
         const classes = await getTeacherClasses(profile.uid);
-        const studentsByClass = await Promise.all(
-          classes.map(item => getStudentsByClass(item.id)),
-        );
-        const todayKey = toDateString();
-        const attendanceByClass = await Promise.all(
-          classes.map(item => getAttendanceByClassAndDate(item.id, todayKey)),
-        );
-        const allAttendance = attendanceByClass.flat();
-        const attendanceSummary = countByStatus(allAttendance);
+        const [studentsByClass, attendanceByClass] = await Promise.all([
+          Promise.all(classes.map(item => getStudentsByClass(item.id))),
+          Promise.all(
+            classes.map(item =>
+              getAttendanceByClassAndDate(item.id, toDateString()),
+            ),
+          ),
+        ]);
+        const attendanceSummary = countByStatus(attendanceByClass.flat());
         const uniqueStudents = new Set(
           studentsByClass.flat().map(student => student.id),
         );
-
-        const nextClassSummaries = classes.map((classItem, index) => {
-          const studentCount = studentsByClass[index]?.length || 0;
-          const presentCount =
-            attendanceByClass[index]?.filter(item => item.status === 'present')
-              .length || 0;
-          return {
-            classItem: {...classItem, studentCount},
-            studentCount,
-            attendancePercent: studentCount
-              ? Math.round((presentCount / studentCount) * 100)
-              : 0,
-          };
-        });
-
-        const activityGroups = await Promise.all(
-          classes.map(async (classItem, index) => {
-            const activities = await getActivitiesByClass(classItem.id);
-            return activities.map(activity => ({
-              activity,
-              className: formatClassTitle(classItem),
-              expectedSubmissions: studentsByClass[index]?.length || 0,
-            }));
-          }),
-        );
-        const activityRows = activityGroups.flat();
-        const submissionsByActivity = await Promise.all(
-          activityRows.map(item => getSubmissionsByActivity(item.activity.id)),
-        );
-        const nextActivities = activityRows
-          .map((item, index) => {
-            const completedSubmissions = submissionsByActivity[index].filter(
-              (submission: ActivitySubmissionRecord) =>
-                completedSubmissionStatuses.has(submission.status),
-            ).length;
-            return {
-              ...item,
-              completedSubmissions,
-            };
-          })
-          .sort((first, second) => {
-            const firstDate =
-              first.activity.dueDate && 'toDate' in first.activity.dueDate
-                ? first.activity.dueDate.toDate()
-                : first.activity.dueDate;
-            const secondDate =
-              second.activity.dueDate && 'toDate' in second.activity.dueDate
-                ? second.activity.dueDate.toDate()
-                : second.activity.dueDate;
-            return Number(secondDate || 0) - Number(firstDate || 0);
-          });
 
         setStats({
           students: uniqueStudents.size,
@@ -249,8 +174,6 @@ export const TeacherDashboardScreen = ({navigation}: Props) => {
           absent: attendanceSummary.absent || 0,
           late: attendanceSummary.late || 0,
         });
-        setClassSummaries(nextClassSummaries);
-        setRecentActivities(nextActivities);
       } catch (loadError) {
         setError(
           loadError instanceof Error
@@ -268,33 +191,10 @@ export const TeacherDashboardScreen = ({navigation}: Props) => {
     [profile],
   );
 
-  const refresh = useCallback(() => {
-    load('refresh');
-  }, [load]);
-
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => load());
     return unsubscribe;
   }, [load, navigation]);
-
-  const navigateToTabScreen = useCallback(
-    (
-      tab: TeacherTabRoute,
-      screen: keyof TeacherStackParamList,
-      params?: object,
-    ) => {
-      navigation.getParent()?.dispatch(
-        CommonActions.navigate({
-          name: tab,
-          params: {
-            screen,
-            params,
-          },
-        }),
-      );
-    },
-    [navigation],
-  );
 
   if (loading) {
     return <LoadingState label="Loading dashboard..." />;
@@ -304,377 +204,176 @@ export const TeacherDashboardScreen = ({navigation}: Props) => {
     <View style={styles.root}>
       <ScrollView
         contentInsetAdjustmentBehavior="automatic"
+        contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
         refreshControl={
           <RefreshControl
             colors={[colors.primary]}
-            onRefresh={refresh}
+            onRefresh={() => load('refresh')}
             refreshing={refreshing}
             tintColor={colors.primary}
           />
         }
-        style={styles.scroll}
-        contentContainerStyle={scrollContentStyle}>
-        
-        {/* HERO SECTION */}
-        <View style={[styles.hero, isHeroCompact && styles.heroCompact]}>
-          <View style={styles.heroGlowTop} />
-          <View style={styles.heroGlowBottom} />
-          <View
-            style={[
-              styles.heroContent,
-              isHeroCompact && styles.heroContentCompact,
-              isHeroVeryCompact && styles.heroContentVeryCompact,
-            ]}>
-            <View style={styles.greetingWrap}>
-              <Text
-                style={[
-                  styles.greeting,
-                  isHeroCompact && styles.greetingCompact,
-                ]}>
-                {getGreeting()}
-              </Text>
-              <Text
-                numberOfLines={1}
-                adjustsFontSizeToFit
-                minimumFontScale={0.72}
-                style={[
-                  styles.teacherName,
-                  isDashboardCompact && styles.teacherNameCompact,
-                ]}>
-                {profile?.fullName || 'Teacher'}
-              </Text>
-              <Text
-                style={[
-                  styles.heroSubtitle,
-                  isDashboardCompact && styles.heroSubtitleCompact,
-                ]}>
-                Here's what's happening in your classes today.
-              </Text>
-            </View>
-            <View
-              style={[
-                styles.heroSide,
-                isHeroCompact && styles.heroSideCompact,
-                isHeroVeryCompact && styles.heroSideVeryCompact,
+        style={styles.scroll}>
+        <View style={[styles.hero, isCompact && styles.heroCompact]}>
+          <View style={styles.heroOrbLeft} />
+          <View style={styles.heroOrbRight} />
+          <View style={styles.heroWave} />
+          <View style={styles.heroTopRow}>
+            <View />
+            <Pressable
+              accessibilityLabel="Open announcements"
+              accessibilityRole="button"
+              hitSlop={10}
+              onPress={() => navigation.navigate('Announcements')}
+              style={({pressed}) => [
+                styles.notificationButton,
+                pressed && styles.pressed,
               ]}>
-              <View
-                style={[
-                  styles.dateBadge,
-                  isDashboardCompact && styles.dateBadgeCompact,
-                  isHeroVeryCompact && styles.dateBadgeStacked,
-                ]}>
-                <View
-                  style={[
-                    styles.calendarIconWrap,
-                    isDashboardCompact && styles.calendarIconWrapCompact,
-                  ]}>
-                  <MaterialCommunityIcons
-                    name="calendar-month"
-                    size={isDashboardCompact ? 20 : 24}
-                    color="#062A66"
-                  />
-                </View>
-                <View style={styles.dateCopy}>
-                  <Text
-                    numberOfLines={1}
-                    style={[
-                      styles.dateText,
-                      isDashboardCompact && styles.dateTextCompact,
-                    ]}>
-                    {readableDate}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.weekdayText,
-                      isDashboardCompact && styles.weekdayTextCompact,
-                    ]}>
-                    {weekday}
-                  </Text>
-                </View>
-              </View>
+              <MaterialCommunityIcons
+                name="bell-outline"
+                size={28}
+                color="#FFFFFF"
+              />
+              <View style={styles.notificationDot} />
+            </Pressable>
+          </View>
+
+          <Text style={[styles.greeting, isCompact && styles.greetingCompact]}>
+            {getGreeting()}
+          </Text>
+          <Text
+            adjustsFontSizeToFit
+            minimumFontScale={0.68}
+            numberOfLines={1}
+            style={[
+              styles.teacherName,
+              isCompact && styles.teacherNameCompact,
+            ]}>
+            {profile?.fullName || 'Teacher'}
+          </Text>
+          <Text
+            style={[
+              styles.heroSubtitle,
+              isCompact && styles.heroSubtitleCompact,
+            ]}>
+            Here's what's happening in your classes today.
+          </Text>
+
+          <View
+            style={[styles.dateBadge, isCompact && styles.dateBadgeCompact]}>
+            <View style={styles.calendarIconWrap}>
+              <MaterialCommunityIcons
+                name="calendar-month-outline"
+                size={isCompact ? 24 : 28}
+                color="#FFFFFF"
+              />
+            </View>
+            <View style={styles.dateCopy}>
+              <Text numberOfLines={1} style={styles.dateText}>
+                {readableDate}
+              </Text>
+              <Text style={styles.weekdayText}>{weekday}</Text>
             </View>
           </View>
         </View>
 
-        <View style={styles.body}>
+        <View style={[styles.content, isNarrow && styles.contentNarrow]}>
           {error ? (
             <View style={styles.errorCard}>
+              <MaterialCommunityIcons
+                name="alert-circle-outline"
+                size={20}
+                color="#DC2626"
+              />
               <Text style={styles.errorText}>{error}</Text>
             </View>
           ) : null}
 
-          {/* OVERVIEW STATS */}
-          <Text
-            style={[
-              styles.sectionTitle,
-              isDashboardCompact && styles.sectionTitleCompactScreen,
-            ]}>
-            Today's Overview
-          </Text>
-          
-          <View style={[styles.overviewGrid, isVeryCompact && styles.overviewGridCompact]}>
-            {overviewCards.map((card) => {
-              // Add alpha to the color for the background tint
-              const tintColor = card.color + '15'; // ~8% opacity hex
-              return (
-                <View
-                  key={card.key}
-                  style={[
-                    styles.overviewCard,
-                    isDashboardCompact && styles.overviewCardCompact,
-                    isVeryCompact && styles.overviewCardVeryCompact,
-                  ]}>
-                  <View style={[styles.overviewIconWrap, { backgroundColor: tintColor }]}>
-                    <MaterialCommunityIcons
-                      name={card.icon}
-                      size={isDashboardCompact ? 28 : 34}
-                      color={card.color}
-                    />
-                  </View>
-                  <Text
-                    style={[
-                      styles.overviewValue,
-                      isDashboardCompact && styles.overviewValueCompact,
-                    ]}>
-                    {stats[card.key]}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.overviewLabel,
-                      isDashboardCompact && styles.overviewLabelCompact,
-                    ]}>
-                    {card.label}
-                  </Text>
-                </View>
-              );
-            })}
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Today's Overview</Text>
+            <Pressable
+              accessibilityLabel="View attendance overview"
+              accessibilityRole="button"
+              hitSlop={8}
+              onPress={() => navigation.navigate('AttendanceHome')}
+              style={({pressed}) => [
+                styles.viewAllButton,
+                pressed && styles.pressed,
+              ]}>
+              <Text style={styles.viewAll}>View all</Text>
+              <MaterialCommunityIcons
+                name="chevron-right"
+                size={22}
+                color={colors.primary}
+              />
+            </Pressable>
           </View>
 
-          {/* QUICK ACTIONS */}
-          <Text
-            style={[
-              styles.sectionTitle,
-              isDashboardCompact && styles.sectionTitleCompactScreen,
-            ]}>
-            Quick Actions
-          </Text>
-          <View
-            style={[
-              styles.quickActionGrid,
-              isVeryCompact && styles.quickActionGridCompact,
-            ]}>
-            {quickActions.map(action => (
-              <Pressable
-                accessibilityRole="button"
-                key={action.route}
-                onPress={() => navigateToTabScreen(action.tab, action.route)}
-                style={({pressed}) => [
-                  styles.quickActionCard,
-                  isDashboardCompact && styles.quickActionCardCompact,
-                  isVeryCompact && styles.quickActionCardVeryCompact,
-                  pressed && styles.pressed,
-                ]}>
-                <View style={[styles.quickActionIconWrap, isDashboardCompact && styles.quickActionIconWrapCompact]}>
+          <View style={styles.overviewGrid}>
+            {overviewCards.map(card => (
+              <View key={card.key} style={styles.overviewCard}>
+                <View
+                  style={[
+                    styles.overviewIconWrap,
+                    {backgroundColor: card.tint},
+                  ]}>
                   <MaterialCommunityIcons
-                    name={action.icon}
-                    size={isDashboardCompact ? 24 : 28}
-                    color="#FFFFFF"
+                    name={card.icon}
+                    size={isCompact ? 28 : 32}
+                    color={card.color}
                   />
                 </View>
                 <Text
-                  numberOfLines={2}
-                  adjustsFontSizeToFit
-                  minimumFontScale={0.82}
                   style={[
-                    styles.quickActionText,
-                    isDashboardCompact && styles.quickActionTextCompact,
+                    styles.overviewValue,
+                    isCompact && styles.overviewValueCompact,
                   ]}>
-                  {action.label}
+                  {stats[card.key]}
                 </Text>
-              </Pressable>
+                <Text style={styles.overviewLabel}>{card.label}</Text>
+                <Text style={styles.overviewDetail}>{card.detail}</Text>
+                <View
+                  style={[styles.cardAccent, {backgroundColor: card.color}]}
+                />
+              </View>
             ))}
           </View>
 
-          {/* MY CLASSES */}
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitleCompact}>My Classes</Text>
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => navigateToTabScreen('ClassesTab', 'ClassList')}
-              style={({pressed}) => pressed && styles.pressed}>
-              <Text style={styles.viewAll}>View All</Text>
-            </Pressable>
-          </View>
-          
-          <View style={styles.listContainer}>
-            {classSummaries.slice(0, 2).length ? (
-              classSummaries.slice(0, 2).map((item, index) => (
-                <Pressable
-                  accessibilityRole="button"
-                  key={item.classItem.id}
-                  onPress={() =>
-                    navigateToTabScreen('ClassesTab', 'ClassDetails', {
-                      classItem: item.classItem,
-                    })
-                  }
-                  style={({pressed}) => [
-                    styles.listItemCard,
-                    isCompact && styles.listItemCardCompact,
-                    pressed && styles.pressed,
+          <Text style={styles.quickActionsTitle}>Quick Actions</Text>
+          <View style={styles.quickActionGrid}>
+            {quickActions.map(action => (
+              <Pressable
+                accessibilityLabel={action.label}
+                accessibilityRole="button"
+                key={action.route}
+                onPress={() => navigation.navigate(action.route)}
+                style={({pressed}) => [
+                  styles.quickActionCard,
+                  isCompact && styles.quickActionCardCompact,
+                  pressed && styles.pressed,
+                ]}>
+                <View
+                  style={[
+                    styles.quickActionIconWrap,
+                    {backgroundColor: action.color},
                   ]}>
-                  <View
-                    style={[
-                      styles.classIcon,
-                      isCompact && styles.classIconCompact,
-                    ]}>
-                    <MaterialCommunityIcons
-                      name={getClassIcon(index)}
-                      size={isCompact ? 28 : 34}
-                      color="#FFFFFF"
-                    />
-                  </View>
-                  <View style={styles.rowMain}>
-                    <Text numberOfLines={1} style={styles.classTitle}>
-                      {formatClassTitle(item.classItem)}
-                    </Text>
-                    <Text numberOfLines={1} style={styles.classSubject}>
-                      {item.classItem.subject}
-                    </Text>
-                    <View style={styles.studentCountBadge}>
-                      <MaterialCommunityIcons name="account-group" size={14} color="#52617E" />
-                      <Text style={styles.classStudentCount}>
-                        {item.studentCount} Students
-                      </Text>
-                    </View>
-                  </View>
-                  <View
-                    style={[
-                      styles.attendanceWrap,
-                      isCompact && styles.attendanceWrapCompact,
-                    ]}>
-                    <Text style={styles.attendancePercent}>
-                      {item.attendancePercent}%
-                    </Text>
-                    <Text style={styles.attendanceLabel}>Attendance</Text>
-                  </View>
-                </Pressable>
-              ))
-            ) : (
-              <View style={styles.emptyCard}>
-                <View style={styles.emptyIconWrap}>
-                  <MaterialCommunityIcons name="google-classroom" size={42} color="#94A3B8" />
+                  <MaterialCommunityIcons
+                    name={action.icon}
+                    size={isCompact ? 27 : 30}
+                    color="#FFFFFF"
+                  />
                 </View>
-                <Text style={styles.emptyTitle}>No classes yet</Text>
-                <Text style={styles.emptyMessage}>
-                  Create a class to start tracking attendance and activities.
-                </Text>
-              </View>
-            )}
-          </View>
-
-          {/* RECENT ACTIVITIES */}
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitleCompact}>Recent Activities</Text>
-            <Pressable
-              accessibilityRole="button"
-              onPress={() =>
-                navigateToTabScreen('ActivitiesTab', 'ActivityList')
-              }
-              style={({pressed}) => pressed && styles.pressed}>
-              <Text style={styles.viewAll}>View All</Text>
-            </Pressable>
-          </View>
-          
-          <View style={styles.listContainer}>
-            {recentActivities.slice(0, 2).length ? (
-              recentActivities.slice(0, 2).map((item, index) => {
-                const isSubmitted =
-                  item.expectedSubmissions > 0 &&
-                  item.completedSubmissions >= item.expectedSubmissions;
-                return (
-                  <Pressable
-                    accessibilityRole="button"
-                    key={item.activity.id}
-                    onPress={() =>
-                      navigateToTabScreen('ActivitiesTab', 'ActivityDetails', {
-                        activity: item.activity,
-                      })
-                    }
-                    style={({pressed}) => [
-                      styles.listItemCard,
-                      isCompact && styles.listItemCardCompact,
-                      pressed && styles.pressed,
-                    ]}>
-                    <View
-                      style={[
-                        styles.activityIconWrap,
-                        isCompact && styles.activityIconWrapCompact,
-                      ]}>
-                        <MaterialCommunityIcons
-                          name="file-document-edit-outline"
-                          size={isCompact ? 26 : 30}
-                          color={colors.primary}
-                        />
-                    </View>
-                    <View style={styles.activityMain}>
-                      <Text numberOfLines={1} style={styles.activityTitle}>
-                        {item.activity.title}
-                      </Text>
-                      <Text numberOfLines={1} style={styles.activityClassName}>
-                        {item.className}
-                      </Text>
-                      <View style={styles.dueRow}>
-                        <MaterialCommunityIcons
-                          name="clock-outline"
-                          size={15}
-                          color="#64748B"
-                        />
-                        <Text style={styles.dueText}>
-                          Due: {toReadableDate(item.activity.dueDate)}
-                        </Text>
-                      </View>
-                    </View>
-                    <View
-                      style={[
-                        styles.activityMeta,
-                        isCompact && styles.activityMetaCompact,
-                      ]}>
-                      <View
-                        style={[
-                          styles.statusPill,
-                          isSubmitted
-                            ? styles.submittedPill
-                            : styles.pendingPill,
-                        ]}>
-                        <Text
-                          style={[
-                            styles.statusText,
-                            isSubmitted
-                              ? styles.submittedText
-                              : styles.pendingText,
-                          ]}>
-                          {isSubmitted ? 'Submitted' : 'Pending'}
-                        </Text>
-                      </View>
-                      <Text style={styles.submissionCount}>
-                        {item.completedSubmissions} / {item.expectedSubmissions}
-                      </Text>
-                    </View>
-                  </Pressable>
-                );
-              })
-            ) : (
-              <View style={styles.emptyCard}>
-                <View style={styles.emptyIconWrap}>
-                  <MaterialCommunityIcons name="clipboard-text-outline" size={42} color="#94A3B8" />
+                <View style={styles.quickActionCopy}>
+                  <Text numberOfLines={2} style={styles.quickActionLabel}>
+                    {action.label}
+                  </Text>
+                  <Text numberOfLines={2} style={styles.quickActionDescription}>
+                    {action.description}
+                  </Text>
                 </View>
-                <Text style={styles.emptyTitle}>No activities yet</Text>
-                <Text style={styles.emptyMessage}>
-                  Create an activity once your first class is ready.
-                </Text>
-              </View>
-            )}
+              </Pressable>
+            ))}
           </View>
         </View>
       </ScrollView>
@@ -683,549 +382,269 @@ export const TeacherDashboardScreen = ({navigation}: Props) => {
 };
 
 const styles = StyleSheet.create({
-  root: {
-    backgroundColor: '#F4F7FB',
-    flex: 1,
-  },
-  scroll: {
-    backgroundColor: '#F4F7FB',
-    flex: 1,
-  },
-  screen: {
-    backgroundColor: '#F4F7FB',
-    paddingHorizontal: 0,
-    paddingTop: 0,
-  },
+  root: {backgroundColor: '#F4F7FC', flex: 1},
+  scroll: {backgroundColor: '#F4F7FC', flex: 1},
+  scrollContent: {paddingBottom: 30},
   hero: {
-    backgroundColor: '#0A2D69',
-    marginHorizontal: 0,
-    marginTop: 0,
-    minHeight: 250,
+    backgroundColor: '#083A93',
+    borderBottomLeftRadius: 32,
+    borderBottomRightRadius: 32,
+    minHeight: 235,
     overflow: 'hidden',
-    paddingBottom: 40,
     paddingHorizontal: 24,
-    paddingTop: 40,
-    borderBottomLeftRadius: 36,
-    borderBottomRightRadius: 36,
-    elevation: 8,
-    shadowColor: '#0A2D69',
-    shadowOffset: { height: 6, width: 0 },
-    shadowOpacity: 0.25,
-    shadowRadius: 16,
-    zIndex: 10,
+    paddingTop: 66,
   },
   heroCompact: {
-    minHeight: 230,
-    paddingBottom: 54,
-    paddingHorizontal: 24,
-    paddingTop: 30,
     borderBottomLeftRadius: 28,
     borderBottomRightRadius: 28,
+    minHeight: 230,
+    paddingHorizontal: 20,
   },
-  heroGlowTop: {
-    backgroundColor: '#1E5DE3',
-    borderRadius: 200,
-    height: 400,
-    opacity: 0.25,
+  heroOrbLeft: {
+    backgroundColor: '#1F6CE5',
+    borderRadius: 260,
+    height: 470,
+    left: -230,
+    opacity: 0.58,
     position: 'absolute',
-    left: -150,
-    top: -150,
-    width: 400,
+    top: -70,
+    width: 470,
   },
-  heroGlowBottom: {
-    backgroundColor: '#357AE8',
-    borderRadius: 150,
-    height: 300,
-    opacity: 0.2,
+  heroOrbRight: {
+    backgroundColor: '#0A54C8',
+    borderRadius: 280,
+    height: 430,
+    opacity: 0.8,
     position: 'absolute',
-    right: -100,
-    bottom: -100,
-    width: 300,
+    right: -150,
+    top: 40,
+    width: 430,
   },
-  heroContent: {
+  heroWave: {
+    backgroundColor: '#3F85EE',
+    borderRadius: 260,
+    bottom: -205,
+    height: 310,
+    left: -70,
+    opacity: 0.48,
+    position: 'absolute',
+    transform: [{rotate: '-8deg'}],
+    width: 620,
+  },
+  heroTopRow: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: 22,
-    justifyContent: 'space-between',
+    height: 40,
+    position: 'absolute',
+    right: 20,
+    top: 57,
   },
-  heroContentCompact: {
+  notificationButton: {
     alignItems: 'center',
-    flexDirection: 'row',
-    gap: 16,
+    height: 40,
+    justifyContent: 'center',
+    position: 'relative',
+    width: 40,
   },
-  heroContentVeryCompact: {
-    alignItems: 'flex-start',
-    flexDirection: 'column',
-    gap: 20,
+  notificationDot: {
+    backgroundColor: '#FF4D5B',
+    borderColor: '#0D4AA5',
+    borderRadius: 7,
+    borderWidth: 2,
+    height: 14,
+    position: 'absolute',
+    right: 1,
+    top: 2,
+    width: 14,
   },
-  greetingWrap: {
-    flex: 1,
-    minWidth: 0,
-  },
-  greeting: {
-    color: '#93B8FA',
-    fontSize: 20,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-  },
-  greetingCompact: {
-    fontSize: 18,
-  },
+  greeting: {color: '#E7F0FF', fontSize: 21, fontWeight: '500'},
+  greetingCompact: {fontSize: 20},
   teacherName: {
     color: '#FFFFFF',
-    fontSize: 38,
+    fontSize: 31,
     fontWeight: '900',
-    letterSpacing: -0.5,
-    marginTop: 4,
+    letterSpacing: -1.2,
+    marginTop: 5,
   },
-  teacherNameCompact: {
-    fontSize: 32,
-  },
+  teacherNameCompact: {fontSize: 28},
   heroSubtitle: {
-    color: '#E0EBFF',
+    color: '#E6EFFF',
     fontSize: 16,
     fontWeight: '500',
-    lineHeight: 24,
-    marginTop: 8,
+    lineHeight: 22,
+    marginTop: 13,
+    maxWidth: 220,
   },
-  heroSubtitleCompact: {
-    fontSize: 14,
-    lineHeight: 20,
-    marginTop: 6,
-  },
-  heroSide: {
-    alignItems: 'center',
-    flexShrink: 0,
-    justifyContent: 'flex-end',
-  },
-  heroSideCompact: {
-    alignItems: 'center',
-    alignSelf: 'auto',
-    justifyContent: 'flex-end',
-  },
-  heroSideVeryCompact: {
-    alignItems: 'flex-start',
-    alignSelf: 'stretch',
-  },
+  heroSubtitleCompact: {fontSize: 15, lineHeight: 21, marginTop: 11},
   dateBadge: {
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.12)',
-    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.96)',
+    borderRadius: 21,
     flexDirection: 'row',
     padding: 8,
-    paddingRight: 18,
-    gap: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
+    position: 'absolute',
+    right: 24,
+    shadowColor: '#0A2F71',
+    shadowOffset: {height: 5, width: 0},
+    shadowOpacity: 0.22,
+    shadowRadius: 10,
+    top: 143,
+    width: 170,
   },
-  dateBadgeCompact: {
-    borderRadius: 16,
-    padding: 6,
-    paddingRight: 14,
-    gap: 10,
-  },
-  dateBadgeStacked: {
-    alignSelf: 'flex-start',
-  },
+  dateBadgeCompact: {right: 20},
   calendarIconWrap: {
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 14,
-    height: 46,
+    backgroundColor: '#2563DF',
+    borderRadius: 13,
+    height: 48,
     justifyContent: 'center',
-    width: 46,
-    shadowColor: '#000',
-    shadowOffset: { height: 4, width: 0 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
+    width: 48,
   },
-  calendarIconWrapCompact: {
-    borderRadius: 12,
-    height: 38,
-    width: 38,
-  },
-  dateCopy: {
-    justifyContent: 'center',
-  },
-  dateText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '800',
-  },
-  dateTextCompact: {
-    fontSize: 14,
-  },
+  dateCopy: {marginLeft: 10, minWidth: 0},
+  dateText: {color: '#132956', fontSize: 16, fontWeight: '900'},
   weekdayText: {
-    color: '#A8C7FA',
+    color: '#657391',
     fontSize: 13,
     fontWeight: '600',
     marginTop: 2,
   },
-  weekdayTextCompact: {
-    fontSize: 12,
-  },
-  body: {
-    paddingBottom: 26,
-    paddingHorizontal: 24,
-    zIndex: 1,
-  },
+  content: {paddingHorizontal: 24, paddingTop: 22},
+  contentNarrow: {paddingHorizontal: 18},
   errorCard: {
+    alignItems: 'center',
     backgroundColor: '#FEF2F2',
     borderColor: '#FECACA',
-    borderRadius: 16,
-    borderWidth: 1,
-    marginBottom: 18,
-    marginTop: 18,
-    padding: 16,
-  },
-  errorText: {
-    color: '#EF4444',
-    fontWeight: '800',
-  },
-  overviewGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    rowGap: 14,
-    marginTop: 4,
-    zIndex: 2,
-  },
-  overviewGridCompact: {
-    gap: 12,
-  },
-  overviewCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    width: '48%',
-    padding: 20,
-    elevation: 6,
-    shadowColor: '#8C9AB5',
-    shadowOffset: { height: 8, width: 0 },
-    shadowOpacity: 0.12,
-    shadowRadius: 18,
-  },
-  overviewCardCompact: {
-    borderRadius: 18,
-    padding: 16,
-  },
-  overviewCardVeryCompact: {
-    width: '100%',
-  },
-  overviewIconWrap: {
-    alignItems: 'center',
     borderRadius: 14,
-    height: 52,
-    justifyContent: 'center',
-    width: 52,
-    marginBottom: 14,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 9,
+    marginBottom: 24,
+    padding: 13,
   },
-  overviewValue: {
-    color: '#0A1B3F',
-    fontSize: 34,
-    fontWeight: '900',
-    letterSpacing: -0.5,
-  },
-  overviewValueCompact: {
-    fontSize: 28,
-  },
-  overviewLabel: {
-    color: '#64748B',
-    fontSize: 15,
-    fontWeight: '600',
-    marginTop: 4,
-  },
-  overviewLabelCompact: {
-    fontSize: 13,
-  },
+  errorText: {color: '#B91C1C', flex: 1, fontSize: 14, fontWeight: '700'},
   sectionHeader: {
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 16,
-    marginTop: 36,
   },
   sectionTitle: {
-    color: '#0A1B3F',
+    color: '#102D60',
     fontSize: 22,
     fontWeight: '900',
-    letterSpacing: -0.2,
-    marginBottom: 18,
-    marginTop: 32,
+    letterSpacing: -0.4,
   },
-  sectionTitleCompactScreen: {
-    fontSize: 19,
-    marginBottom: 14,
-    marginTop: 28,
+  viewAllButton: {alignItems: 'center', flexDirection: 'row'},
+  viewAll: {color: colors.primary, fontSize: 15, fontWeight: '800'},
+  overviewGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 14,
+    justifyContent: 'space-between',
+    marginTop: 18,
   },
-  sectionTitleCompact: {
-    color: '#0A1B3F',
-    fontSize: 22,
+  overviewCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 19,
+    minHeight: 168,
+    overflow: 'hidden',
+    padding: 14,
+    shadowColor: '#6A7EA5',
+    shadowOffset: {height: 5, width: 0},
+    shadowOpacity: 0.1,
+    shadowRadius: 11,
+    width: '47%',
+  },
+  overviewIconWrap: {
+    alignItems: 'center',
+    borderRadius: 14,
+    height: 49,
+    justifyContent: 'center',
+    width: 49,
+  },
+  overviewValue: {
+    color: '#112B5D',
+    fontSize: 30,
     fontWeight: '900',
-    letterSpacing: -0.2,
+    letterSpacing: -0.7,
+    marginTop: 13,
   },
-  viewAll: {
-    color: colors.primary,
+  overviewValueCompact: {fontSize: 28},
+  overviewLabel: {
+    color: '#132956',
     fontSize: 16,
-    fontWeight: '800',
+    fontWeight: '900',
+    marginTop: 1,
+  },
+  overviewDetail: {
+    color: '#7181A0',
+    fontSize: 13,
+    fontWeight: '600',
+    marginTop: 5,
+  },
+  cardAccent: {
+    borderRadius: 5,
+    bottom: 10,
+    height: 4,
+    left: 14,
+    position: 'absolute',
+    width: 55,
+  },
+  quickActionsTitle: {
+    color: '#102D60',
+    fontSize: 22,
+    fontWeight: '900',
+    letterSpacing: -0.4,
+    marginTop: 30,
   },
   quickActionGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    rowGap: 14,
-  },
-  quickActionGridCompact: {
-    gap: 12,
+    gap: 14,
+    marginTop: 16,
   },
   quickActionCard: {
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    width: '48%',
-    paddingVertical: 24,
-    paddingHorizontal: 16,
-    elevation: 5,
-    shadowColor: '#8C9AB5',
-    shadowOffset: { height: 6, width: 0 },
+    borderRadius: 19,
+    flexDirection: 'row',
+    minHeight: 102,
+    paddingHorizontal: 13,
+    paddingVertical: 13,
+    shadowColor: '#6A7EA5',
+    shadowOffset: {height: 5, width: 0},
     shadowOpacity: 0.1,
-    shadowRadius: 14,
+    shadowRadius: 10,
+    width: '47%',
   },
   quickActionCardCompact: {
-    borderRadius: 20,
-    paddingVertical: 20,
-    paddingHorizontal: 12,
-  },
-  quickActionCardVeryCompact: {
-    width: '100%',
+    minHeight: 96,
+    paddingHorizontal: 11,
+    paddingVertical: 11,
   },
   quickActionIconWrap: {
     alignItems: 'center',
-    backgroundColor: colors.primary,
-    borderRadius: 22,
-    height: 56,
+    borderRadius: 14,
+    height: 46,
     justifyContent: 'center',
-    width: 56,
-    marginBottom: 16,
-    shadowColor: colors.primary,
-    shadowOffset: { height: 4, width: 0 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    elevation: 6,
-  },
-  quickActionIconWrapCompact: {
-    borderRadius: 18,
-    height: 48,
-    width: 48,
-    marginBottom: 12,
-  },
-  quickActionText: {
-    color: '#1E293B',
-    fontSize: 16,
-    fontWeight: '800',
-    textAlign: 'center',
-    letterSpacing: -0.2,
-  },
-  quickActionTextCompact: {
-    fontSize: 14,
-  },
-  listContainer: {
-    gap: 14,
-  },
-  listItemCard: {
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    flexDirection: 'row',
-    gap: 16,
-    paddingHorizontal: 18,
-    paddingVertical: 18,
-    elevation: 4,
-    shadowColor: '#8C9AB5',
-    shadowOffset: { height: 4, width: 0 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-  },
-  listItemCardCompact: {
-    borderRadius: 16,
-    gap: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 16,
-  },
-  classIcon: {
-    alignItems: 'center',
-    backgroundColor: '#1E293B',
-    borderRadius: 16,
-    height: 64,
-    justifyContent: 'center',
-    width: 64,
-    shadowColor: '#000',
-    shadowOffset: { height: 4, width: 0 },
-    shadowOpacity: 0.15,
+    shadowColor: '#4B67A0',
+    shadowOffset: {height: 4, width: 0},
+    shadowOpacity: 0.25,
     shadowRadius: 8,
+    width: 46,
   },
-  classIconCompact: {
-    borderRadius: 14,
-    height: 54,
-    width: 54,
-  },
-  rowMain: {
-    flex: 1,
-    gap: 4,
-    minWidth: 0,
-    justifyContent: 'center',
-  },
-  classTitle: {
-    color: '#0F172A',
-    fontSize: 18,
-    fontWeight: '900',
-    letterSpacing: -0.3,
-  },
-  classSubject: {
-    color: colors.primary,
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  studentCountBadge: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 6,
-    marginTop: 4,
-  },
-  classStudentCount: {
-    color: '#64748B',
+  quickActionCopy: {flex: 1, marginLeft: 9, minWidth: 0},
+  quickActionLabel: {
+    color: '#142A58',
     fontSize: 13,
-    fontWeight: '600',
-  },
-  attendanceWrap: {
-    alignItems: 'flex-end',
-    minWidth: 70,
-  },
-  attendanceWrapCompact: {
-    minWidth: 60,
-  },
-  attendancePercent: {
-    color: '#10B981',
-    fontSize: 24,
     fontWeight: '900',
+    lineHeight: 17,
   },
-  attendanceLabel: {
-    color: '#94A3B8',
-    fontSize: 12,
-    fontWeight: '700',
-    marginTop: 2,
-  },
-  activityIconWrap: {
-    alignItems: 'center',
-    backgroundColor: '#F0F5FF',
-    borderRadius: 16,
-    height: 60,
-    justifyContent: 'center',
-    width: 60,
-  },
-  activityIconWrapCompact: {
-    borderRadius: 14,
-    height: 52,
-    width: 52,
-  },
-  activityMain: {
-    flex: 1,
-    gap: 4,
-    minWidth: 0,
-    justifyContent: 'center',
-  },
-  activityTitle: {
-    color: '#0F172A',
-    fontSize: 17,
-    fontWeight: '800',
-    letterSpacing: -0.2,
-  },
-  activityClassName: {
-    color: '#64748B',
-    fontSize: 13,
+  quickActionDescription: {
+    color: '#687A9D',
+    fontSize: 11,
     fontWeight: '600',
+    lineHeight: 14,
+    marginTop: 3,
   },
-  dueRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 6,
-    marginTop: 6,
-  },
-  dueText: {
-    color: '#64748B',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  activityMeta: {
-    alignItems: 'flex-end',
-    gap: 10,
-    justifyContent: 'center',
-    minWidth: 82,
-  },
-  activityMetaCompact: {
-    minWidth: 70,
-  },
-  statusPill: {
-    alignItems: 'center',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  statusText: {
-    fontSize: 12,
-    fontWeight: '800',
-    letterSpacing: 0.3,
-  },
-  submittedPill: {
-    backgroundColor: '#ECFDF5',
-  },
-  submittedText: {
-    color: '#059669',
-  },
-  pendingPill: {
-    backgroundColor: '#FFF7ED',
-  },
-  pendingText: {
-    color: '#EA580C',
-  },
-  submissionCount: {
-    color: '#475569',
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  pressed: {
-    opacity: 0.75,
-    transform: [{ scale: 0.98 }],
-  },
-  emptyCard: {
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderColor: '#F1F5F9',
-    borderRadius: 20,
-    borderWidth: 1,
-    paddingHorizontal: 24,
-    paddingVertical: 40,
-    borderStyle: 'dashed',
-  },
-  emptyIconWrap: {
-    alignItems: 'center',
-    backgroundColor: '#F8FAFC',
-    borderRadius: 40,
-    height: 80,
-    justifyContent: 'center',
-    marginBottom: 16,
-    width: 80,
-  },
-  emptyTitle: {
-    color: '#1E293B',
-    fontSize: 18,
-    fontWeight: '800',
-  },
-  emptyMessage: {
-    color: '#64748B',
-    fontSize: 14,
-    lineHeight: 20,
-    marginTop: 8,
-    textAlign: 'center',
-    maxWidth: 240,
-  },
+  pressed: {opacity: 0.76, transform: [{scale: 0.98}]},
 });

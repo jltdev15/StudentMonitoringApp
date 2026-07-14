@@ -76,9 +76,19 @@ export type ActivityRecord = {
   dueDate: Timestamp;
   totalPoints: number;
   createdBy: string;
+  acceptsImageAttachments?: boolean;
   status: ActivityStatus;
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
+};
+
+export type ActivityAttachment = {
+  id: string;
+  storagePath: string;
+  downloadUrl: string;
+  fileName: string;
+  contentType: string;
+  order: number;
 };
 
 export type ActivitySubmissionRecord = {
@@ -91,6 +101,7 @@ export type ActivitySubmissionRecord = {
   remarks: string;
   checkedBy: string;
   submittedAt: Timestamp;
+  attachments?: ActivityAttachment[];
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
 };

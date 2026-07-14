@@ -112,14 +112,13 @@ export const RegisterScreen = ({navigation, route}: Props) => {
 
         <Button
           mode="contained"
-          loading={loading}
           disabled={loading}
           onPress={handleRegister}
           buttonColor="#075FE4"
           textColor="#FFFFFF"
           contentStyle={styles.primaryButtonContent}
           labelStyle={styles.primaryButtonLabel}>
-          Register
+          {loading ? 'Creating account...' : 'Register'}
         </Button>
 
         <Pressable
