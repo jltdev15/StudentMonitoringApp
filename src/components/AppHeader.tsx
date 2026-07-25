@@ -1,8 +1,16 @@
 import React from 'react';
 import {useNavigation} from '@react-navigation/native';
-import {Pressable, StyleSheet, View, useWindowDimensions} from 'react-native';
+import {
+  ImageBackground,
+  Pressable,
+  StyleSheet,
+  View,
+  useWindowDimensions,
+} from 'react-native';
 import {Text} from 'react-native-paper';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+
+const coverBackground = require('../assets/images/cover-bg.webp');
 
 type Props = {
   title: string;
@@ -34,7 +42,10 @@ export const AppHeader = ({
   const handleBack = onBackPress || navigation.goBack;
 
   return (
-    <View
+    <ImageBackground
+      imageStyle={styles.coverImage}
+      resizeMode="cover"
+      source={coverBackground}
       style={[
         styles.container,
         variant === 'teacher' && styles.teacherContainer,
@@ -43,8 +54,8 @@ export const AppHeader = ({
         isCompact && variant === 'teacher' && styles.teacherContainerCompact,
         isCompact && shouldUseInlineTitle && styles.inlineContainerCompact,
       ]}>
-      <View style={styles.heroGlow} />
-      <View style={styles.topRow}>
+      <View style={styles.coverOverlay} />
+      <View style={[styles.topRow, shouldUseInlineTitle && styles.inlineTopRow]}>
         {shouldShowBack ? (
           <Pressable
             accessibilityRole="button"
@@ -64,14 +75,24 @@ export const AppHeader = ({
           <View style={styles.iconSpacer} />
         ) : null}
         {shouldUseInlineTitle ? (
-          <Text
-            testID="app-header-inline-title"
-            numberOfLines={1}
-            adjustsFontSizeToFit
-            minimumFontScale={0.78}
-            style={styles.inlineTitle}>
-            {title}
-          </Text>
+          <View style={styles.inlineCopy}>
+            <Text
+              testID="app-header-inline-title"
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.78}
+              style={styles.inlineTitle}>
+              {title}
+            </Text>
+            {subtitle ? (
+              <Text
+                variant="bodyMedium"
+                numberOfLines={2}
+                style={[styles.subtitle, styles.inlineSubtitle]}>
+                {subtitle}
+              </Text>
+            ) : null}
+          </View>
         ) : null}
         {rightIcon ? (
           <Pressable
@@ -106,28 +127,25 @@ export const AppHeader = ({
           {title}
         </Text>
       ) : null}
-      {subtitle ? (
+      {subtitle && !shouldUseInlineTitle ? (
         <Text
           variant="bodyMedium"
           numberOfLines={3}
           style={[
             styles.subtitle,
             variant === 'teacher' && styles.teacherSubtitle,
-            shouldShowBack && styles.inlineSubtitle,
             isCompact && styles.subtitleCompact,
           ]}>
           {subtitle}
         </Text>
       ) : null}
-    </View>
+    </ImageBackground>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     backgroundColor: '#083A93',
-    borderBottomLeftRadius: 32,
-    borderBottomRightRadius: 32,
     marginBottom: 22,
     marginHorizontal: -20,
     marginTop: -20,
@@ -145,8 +163,6 @@ const styles = StyleSheet.create({
   },
   teacherContainer: {
     backgroundColor: '#083A93',
-    borderBottomLeftRadius: 32,
-    borderBottomRightRadius: 32,
     marginBottom: 22,
     minHeight: 184,
     paddingBottom: 28,
@@ -156,15 +172,14 @@ const styles = StyleSheet.create({
     paddingBottom: 24,
     paddingTop: 22,
   },
-  heroGlow: {
-    backgroundColor: '#0C3D87',
-    borderRadius: 150,
-    height: 300,
-    opacity: 0.22,
+  coverImage: {opacity: 0.98},
+  coverOverlay: {
+    backgroundColor: 'rgba(5, 50, 138, 0.38)',
+    bottom: 0,
+    left: 0,
     position: 'absolute',
-    right: -120,
-    top: -110,
-    width: 300,
+    right: 0,
+    top: 0,
   },
   iconButton: {
     alignItems: 'center',
@@ -183,22 +198,21 @@ const styles = StyleSheet.create({
   },
   inlineTitle: {
     color: '#FFFFFF',
-    flex: 1,
     fontSize: 22,
     fontWeight: '900',
     letterSpacing: -0.4,
-    marginLeft: 10,
-    marginRight: 10,
   },
+  inlineCopy: {flex: 1, marginHorizontal: 10, minWidth: 0},
   inlineContainer: {minHeight: 128, paddingBottom: 20},
   inlineContainerCompact: {minHeight: 112, paddingBottom: 18},
-  inlineSubtitle: {marginLeft: 52, marginTop: 9},
+  inlineTopRow: {marginTop: 12},
+  inlineSubtitle: {lineHeight: 18, marginTop: 1},
   subtitle: {
     color: '#E7EEFD',
     fontSize: 15,
     fontWeight: '500',
     lineHeight: 21,
-    marginTop: 7,
+    marginTop: 4,
     maxWidth: 620,
   },
   subtitleCompact: {
@@ -224,7 +238,7 @@ const styles = StyleSheet.create({
   teacherSubtitle: {
     color: '#DDEAFF',
     fontWeight: '500',
-    marginTop: 7,
+    marginTop: 4,
   },
   topRow: {
     alignItems: 'center',

@@ -69,6 +69,7 @@ export const StudentListScreen = ({route, navigation}: Props) => {
           titleInline
           title="Students"
           subtitle="Search and manage student records."
+          showBack={false}
         />
       </View>
       <ScrollView

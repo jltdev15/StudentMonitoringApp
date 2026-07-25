@@ -16,7 +16,7 @@ export type AnnouncementInput = Omit<
 
 export type AnnouncementUpdateInput = Pick<
   AnnouncementRecord,
-  'message' | 'title'
+  'message' | 'title' | 'featured'
 >;
 
 export const createAnnouncement = async (payload: AnnouncementInput) => {
@@ -80,5 +80,7 @@ export const getAnnouncementsForStudent = async (classIds: string[]) => {
     ...classAnnouncements.flatMap(snapshot =>
       snapshot.docs.map(doc => mapDoc<AnnouncementRecord>(doc)),
     ),
-  ];
+  ].sort(
+    (first, second) => announcementTime(second) - announcementTime(first),
+  );
 };

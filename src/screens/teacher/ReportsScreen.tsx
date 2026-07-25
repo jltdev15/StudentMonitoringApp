@@ -107,6 +107,7 @@ export const ReportsScreen = () => {
         variant="teacher"
         title="Reports"
         subtitle="Attendance, activities, performance, and missing work."
+        showBack={false}
       />
       <Menu
         visible={menuVisible}

@@ -393,7 +393,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     lineHeight: 25,
-    marginTop: 12,
+    marginTop: 6,
     maxWidth: 560,
   },
   subtitleCompact: {

@@ -6,6 +6,9 @@ import {getClassById} from '../src/services/classService';
 
 jest.mock('../src/context/AuthContext', () => ({useAuth: jest.fn()}));
 jest.mock('../src/services/classService', () => ({getClassById: jest.fn()}));
+jest.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({bottom: 0, left: 0, right: 0, top: 0}),
+}));
 jest.mock('../src/components/AppHeader', () => ({
   AppHeader: ({title, subtitle}: {title: string; subtitle?: string}) => {
     const react = require('react');
@@ -49,6 +52,7 @@ jest.mock('../src/components/AppButton', () => ({
 
 const mockedUseAuth = useAuth as jest.Mock;
 const mockedGetClassById = getClassById as jest.Mock;
+const mockedSignOut = jest.fn();
 
 const profile = {
   uid: 'student-user',
@@ -91,12 +95,12 @@ beforeEach(() => {
   mockedUseAuth.mockReturnValue({
     profile,
     student,
-    signOut: jest.fn(),
+    signOut: mockedSignOut,
     loading: false,
   });
 });
 
-it('shows the primary active class grade level and section', async () => {
+it('shows the cover-profile identity and primary active class details', async () => {
   mockedGetClassById.mockResolvedValue({
     id: 'class-1',
     className: 'Mathematics 10',
@@ -111,6 +115,9 @@ it('shows the primary active class grade level and section', async () => {
   const tree = await renderScreen();
   const text = renderedText(tree);
 
+  expect(text).toContain('Maria Santos');
+  expect(text).toContain('maria@example.com');
+  expect(text).toContain('Active');
   expect(text).toContain('Grade Level');
   expect(text).toContain('Grade 10');
   expect(text).toContain('Section');
@@ -146,4 +153,38 @@ it('keeps profile details visible and offers retry when enrollment fails', async
   expect(text).toContain('Maria Santos');
   expect(text).toContain('Unavailable');
   expect(text).toContain('Retry');
+
+  await act(async () => {
+    tree.root
+      .findByProps({accessibilityLabel: 'Retry loading enrollment'})
+      .props.onPress();
+  });
+
+  expect(mockedGetClassById).toHaveBeenCalledTimes(2);
+});
+
+it('keeps long identity details visible and signs out from the new profile action', async () => {
+  mockedUseAuth.mockReturnValue({
+    profile: {
+      ...profile,
+      email: 'very.long.student.email.address@example.com',
+      fullName: 'Dela Cruz, Juan Lorenzo Miguel',
+    },
+    student: {...student, fullName: 'Dela Cruz, Juan Lorenzo Miguel'},
+    signOut: mockedSignOut,
+    loading: false,
+  });
+  mockedGetClassById.mockResolvedValue(null);
+
+  const tree = await renderScreen();
+  const text = renderedText(tree);
+
+  expect(text).toContain('Dela Cruz, Juan Lorenzo Miguel');
+  expect(text).toContain('very.long.student.email.address@example.com');
+
+  await act(async () => {
+    tree.root.findByProps({accessibilityLabel: 'Log out'}).props.onPress();
+  });
+
+  expect(mockedSignOut).toHaveBeenCalledTimes(1);
 });

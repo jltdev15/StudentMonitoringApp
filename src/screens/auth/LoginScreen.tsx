@@ -1,6 +1,7 @@
 import React, {useEffect, useState} from 'react';
 import {
   Image,
+  ImageBackground,
   Pressable,
   StyleSheet,
   TextInput as RNTextInput,
@@ -8,7 +9,7 @@ import {
   View,
 } from 'react-native';
 import {NativeStackScreenProps} from '@react-navigation/native-stack';
-import {Button, HelperText, Text} from 'react-native-paper';
+import {HelperText, Text} from 'react-native-paper';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import {Screen} from '../../components/Screen';
 import {useAuth} from '../../context/AuthContext';
@@ -16,8 +17,64 @@ import {AuthStackParamList} from '../../types/navigation';
 import {isEmail} from '../../utils/validationUtils';
 
 const classTrackLogo = require('../../assets/images/class-track-logo.png');
+const loginBackground = require('../../assets/images/login-bg.webp');
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'Login'>;
+
+type LoginFieldProps = {
+  accessibilityLabel: string;
+  icon: string;
+  isPassword?: boolean;
+  onChangeText: (value: string) => void;
+  onTogglePassword?: () => void;
+  passwordVisible?: boolean;
+  placeholder: string;
+  value: string;
+};
+
+const LoginField = ({
+  accessibilityLabel,
+  icon,
+  isPassword = false,
+  onChangeText,
+  onTogglePassword,
+  passwordVisible = false,
+  placeholder,
+  value,
+}: LoginFieldProps) => (
+  <View style={styles.field}>
+    <MaterialCommunityIcons name={icon} size={27} color="#1460E8" />
+    <View style={styles.fieldCopy}>
+      <Text style={styles.fieldLabel}>{accessibilityLabel}</Text>
+      <RNTextInput
+        accessibilityLabel={accessibilityLabel}
+        autoCapitalize="none"
+        autoCorrect={false}
+        keyboardType={isPassword ? 'default' : 'email-address'}
+        onChangeText={onChangeText}
+        placeholder={placeholder}
+        placeholderTextColor="#8A98B5"
+        secureTextEntry={isPassword && !passwordVisible}
+        style={styles.input}
+        value={value}
+      />
+    </View>
+    {isPassword ? (
+      <Pressable
+        accessibilityLabel={passwordVisible ? 'Hide password' : 'Show password'}
+        accessibilityRole="button"
+        hitSlop={10}
+        onPress={onTogglePassword}
+        style={styles.eyeButton}>
+        <MaterialCommunityIcons
+          name={passwordVisible ? 'eye-outline' : 'eye-off-outline'}
+          size={25}
+          color="#7E8CA7"
+        />
+      </Pressable>
+    ) : null}
+  </View>
+);
 
 export const LoginScreen = ({navigation}: Props) => {
   const {height, width} = useWindowDimensions();
@@ -30,19 +87,8 @@ export const LoginScreen = ({navigation}: Props) => {
   const [verificationRequired, setVerificationRequired] = useState(false);
   const isShortScreen = height < 740;
   const isNarrowScreen = width < 380;
-
-  const logoSize = isShortScreen ? 144 : isNarrowScreen ? 180 : 220;
   const contentMinHeight = Math.max(height - 32, 0);
-  const fieldMinHeight = isShortScreen ? 58 : 68;
-  const inputMinHeight = isShortScreen ? 50 : 60;
-  const loginButtonHeight = isShortScreen ? 56 : 66;
-  const footerScale = isShortScreen ? 0.74 : isNarrowScreen ? 0.9 : 1;
-  const contentMinHeightStyle = {minHeight: contentMinHeight};
-  const fieldHeightStyle = {minHeight: fieldMinHeight};
-  const footerElementScaleStyle = {transform: [{scale: footerScale}]};
-  const inputHeightStyle = {minHeight: inputMinHeight};
-  const loginButtonHeightStyle = {minHeight: loginButtonHeight};
-  const logoSizeStyle = {height: logoSize, width: logoSize};
+  const sheetTopMargin = Math.max(48, Math.round(height * 0.59) - 310);
   const hasVerificationAuthError = Boolean(
     authError?.includes('verify your email'),
   );
@@ -78,7 +124,9 @@ export const LoginScreen = ({navigation}: Props) => {
 
   const handleResend = async () => {
     if (!isEmail(email) || !password) {
-      setError('Please enter your email and password to resend the verification link.');
+      setError(
+        'Please enter your email and password to resend the verification link.',
+      );
       return;
     }
     setError('');
@@ -90,46 +138,35 @@ export const LoginScreen = ({navigation}: Props) => {
     }
   };
 
+  const screenStyle = [
+    styles.content,
+    isShortScreen && styles.contentShort,
+    isNarrowScreen && styles.contentNarrow,
+    {minHeight: contentMinHeight},
+  ];
+
   if (showVerificationSection) {
     const resendSucceeded = error.includes('Verification email resent');
     return (
-      <Screen
-        style={[
-          styles.content,
-          styles.verificationContent,
-          isShortScreen && styles.contentShort,
-          isNarrowScreen && styles.contentNarrow,
-          contentMinHeightStyle,
-        ]}>
-        <View
-          style={[
-            styles.backgroundDotGrid,
-            isShortScreen && styles.backgroundDotGridShort,
-            isNarrowScreen && styles.backgroundDotGridNarrow,
-          ]}>
-          {Array.from({length: 9}).map((_, index) => (
-            <View key={index} style={styles.backgroundDot} />
-          ))}
-        </View>
-        <View
-          style={[
-            styles.backgroundCircle,
-            isShortScreen && styles.backgroundCircleShort,
-          ]}
+      <Screen style={[...screenStyle, styles.verificationContent]}>
+        <ImageBackground
+          imageStyle={styles.backgroundImageContent}
+          resizeMode="cover"
+          source={loginBackground}
+          style={styles.backgroundImage}
         />
-        <View style={[styles.brand, isShortScreen && styles.brandShort]}>
-          <Image
-            source={classTrackLogo}
-            style={[styles.logoImage, logoSizeStyle]}
-            resizeMode="contain"
-          />
-        </View>
-        <View style={styles.verificationCard}>
+        <Brand short={isShortScreen} />
+        <View
+          style={[
+            styles.sheet,
+            styles.verificationSheet,
+            {marginTop: sheetTopMargin},
+          ]}>
           <View style={styles.verificationIcon}>
             <MaterialCommunityIcons
               name="email-check-outline"
-              size={38}
-              color="#2563EB"
+              size={35}
+              color="#1460E8"
             />
           </View>
           <Text style={styles.verificationTitle}>Verify your email</Text>
@@ -147,18 +184,27 @@ export const LoginScreen = ({navigation}: Props) => {
               {error}
             </Text>
           ) : null}
-          <Button
-            mode="contained"
+          <Pressable
+            accessibilityLabel="Resend verification email"
+            accessibilityRole="button"
             disabled={loading}
             onPress={handleResend}
-            buttonColor="#075FE4"
-            textColor="#FFFFFF"
-            style={styles.verificationButton}
-            contentStyle={styles.verificationButtonContent}
-            labelStyle={styles.loginButtonLabel}>
-            {loading ? 'Sending email...' : 'Resend Verification Email'}
-          </Button>
+            style={({pressed}) => [
+              styles.loginButton,
+              styles.verificationButton,
+              (pressed || loading) && styles.pressed,
+            ]}>
+            <Text style={styles.loginButtonLabel}>
+              {loading ? 'Sending email...' : 'Resend Verification Email'}
+            </Text>
+            <MaterialCommunityIcons
+              name="chevron-right"
+              size={28}
+              color="#FFFFFF"
+            />
+          </Pressable>
           <Pressable
+            accessibilityLabel="Use another account"
             accessibilityRole="button"
             onPress={() => {
               setError('');
@@ -174,584 +220,266 @@ export const LoginScreen = ({navigation}: Props) => {
   }
 
   return (
-    <Screen
-      style={[
-        styles.content,
-        isShortScreen && styles.contentShort,
-        isNarrowScreen && styles.contentNarrow,
-        contentMinHeightStyle,
-      ]}>
-      <View
-        style={[
-          styles.backgroundDotGrid,
-          isShortScreen && styles.backgroundDotGridShort,
-          isNarrowScreen && styles.backgroundDotGridNarrow,
-        ]}>
-        {Array.from({length: 9}).map((_, index) => (
-          <View key={index} style={styles.backgroundDot} />
-        ))}
-      </View>
-      <View
-        style={[
-          styles.backgroundCircle,
-          isShortScreen && styles.backgroundCircleShort,
-        ]}
+    <Screen style={screenStyle}>
+      <ImageBackground
+        imageStyle={styles.backgroundImageContent}
+        resizeMode="cover"
+        source={loginBackground}
+        style={styles.backgroundImage}
       />
 
-      <View style={[styles.brand, isShortScreen && styles.brandShort]}>
-        <Image
-          source={classTrackLogo}
-          style={[styles.logoImage, logoSizeStyle]}
-          resizeMode="contain"
-        />
-        <Text style={styles.brandSubtitle}>
-          Attendance. Activities. Progress.
-        </Text>
-      </View>
-
-      <View style={[styles.welcome, isShortScreen && styles.welcomeShort]}>
-        <Text style={[styles.title, isShortScreen && styles.titleShort]}>
-          Welcome Back!
-        </Text>
-        <Text style={styles.subtitle}>Login to continue to your account</Text>
-      </View>
-
-      <View style={[styles.form, isShortScreen && styles.formShort]}>
-        <Text style={styles.label}>Email</Text>
-        <View
-          style={[
-            styles.inputWrap,
-            isNarrowScreen && styles.inputWrapNarrow,
-            fieldHeightStyle,
-          ]}>
-          <MaterialCommunityIcons
-            name="email-outline"
-            size={28}
-            color="#747A8A"
-          />
-          <RNTextInput
-            value={email}
-            onChangeText={setEmail}
-            autoCapitalize="none"
-            autoCorrect={false}
-            keyboardType="email-address"
-            placeholder="Enter your email"
-            placeholderTextColor="#7B8191"
-            style={[
-              styles.input,
-              isNarrowScreen && styles.inputNarrow,
-              inputHeightStyle,
-            ]}
-          />
-        </View>
-
-        <Text
-          style={[
-            styles.label,
-            styles.passwordLabel,
-            isShortScreen && styles.passwordLabelShort,
-          ]}>
-          Password
-        </Text>
-        <View
-          style={[
-            styles.inputWrap,
-            isNarrowScreen && styles.inputWrapNarrow,
-            fieldHeightStyle,
-          ]}>
-          <MaterialCommunityIcons
-            name="lock-outline"
-            size={29}
-            color="#747A8A"
-          />
-          <RNTextInput
-            value={password}
-            onChangeText={setPassword}
-            placeholder="Enter your password"
-            placeholderTextColor="#7B8191"
-            secureTextEntry={!passwordVisible}
-            style={[
-              styles.input,
-              isNarrowScreen && styles.inputNarrow,
-              inputHeightStyle,
-            ]}
-          />
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={
-              passwordVisible ? 'Hide password' : 'Show password'
-            }
-            onPress={() => setPasswordVisible(current => !current)}
-            hitSlop={10}
-            style={styles.eyeButton}>
-            <MaterialCommunityIcons
-              name={passwordVisible ? 'eye-outline' : 'eye-off-outline'}
-              size={28}
-              color="#747A8A"
-            />
-          </Pressable>
-        </View>
-
-        <HelperText
-          type="error"
-          visible={Boolean(formError)}
-          style={styles.helperText}>
-          {formError || ' '}
-        </HelperText>
-        
-        <Pressable style={styles.forgotButton}>
-          <Text style={styles.forgotText}>Forgot Password?</Text>
-        </Pressable>
-
-        <Button
-          mode="contained"
-          disabled={loading}
-          onPress={handleLogin}
-          buttonColor="#075FE4"
-          textColor="#FFFFFF"
-          style={styles.loginButton}
-          contentStyle={[
-            styles.loginButtonContent,
-            loginButtonHeightStyle,
-          ]}
-          labelStyle={styles.loginButtonLabel}>
-          {loading ? 'Signing in...' : 'Login'}
-        </Button>
-
-        <View
-          style={[
-            styles.accountRow,
-            isShortScreen && styles.accountRowShort,
-            isNarrowScreen && styles.accountRowNarrow,
-          ]}>
-          <Text style={styles.accountText}>Don&apos;t have an account?</Text>
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => navigation.navigate('StudentVerification')}>
-            <Text style={styles.contactText}>Register as student</Text>
-          </Pressable>
-        </View>
-      </View>
+      <Brand short={isShortScreen} />
 
       <View
         style={[
-          styles.footerScene,
-          isShortScreen && styles.footerSceneShort,
-          isNarrowScreen && styles.footerSceneNarrow,
+          styles.sheet,
+          isShortScreen && styles.sheetShort,
+          {marginTop: sheetTopMargin},
         ]}>
-        <View style={styles.footerHill} />
-        <View
-          style={[styles.treeLeft, footerElementScaleStyle]}>
-          <View style={styles.treeTop} />
-          <View style={styles.treeTrunk} />
-        </View>
-        <View
-          style={[styles.treeRight, footerElementScaleStyle]}>
-          <View style={styles.treeTop} />
-          <View style={styles.treeTrunk} />
-        </View>
-        <View
-          style={[
-            styles.schoolBuilding,
-            footerElementScaleStyle,
-          ]}>
-          <View style={styles.schoolRoof} />
-          <View style={styles.flagPole} />
-          <View style={styles.flag} />
-          <View style={styles.clock} />
-          <View style={styles.schoolDoor} />
-          <View style={styles.windowRow}>
-            <View style={styles.window} />
-            <View style={styles.window} />
-            <View style={styles.window} />
+        <View style={styles.welcomeRow}>
+          <View style={styles.welcomeIcon}>
+            <MaterialCommunityIcons
+              name="account-outline"
+              size={38}
+              color="#1460E8"
+            />
+          </View>
+          <View style={styles.welcomeCopy}>
+            <Text style={styles.title}>Welcome Back!</Text>
+            <Text style={styles.subtitle}>
+              Login to continue to your account
+            </Text>
           </View>
         </View>
-        <View style={styles.homeIndicator} />
+
+        <View style={styles.form}>
+          <LoginField
+            accessibilityLabel="Email"
+            icon="email-outline"
+            onChangeText={setEmail}
+            placeholder="Enter your email"
+            value={email}
+          />
+          <View style={styles.passwordField}>
+            <LoginField
+              accessibilityLabel="Password"
+              icon="lock-outline"
+              isPassword
+              onChangeText={setPassword}
+              onTogglePassword={() => setPasswordVisible(current => !current)}
+              passwordVisible={passwordVisible}
+              placeholder="Enter your password"
+              value={password}
+            />
+          </View>
+
+          {formError ? (
+            <HelperText type="error" style={styles.helperText}>
+              {formError}
+            </HelperText>
+          ) : null}
+
+          <Pressable accessibilityRole="button" style={styles.forgotButton}>
+            <Text style={styles.forgotText}>Forgot Password?</Text>
+          </Pressable>
+
+          <Pressable
+            accessibilityLabel="Login"
+            accessibilityRole="button"
+            disabled={loading}
+            onPress={handleLogin}
+            style={({pressed}) => [
+              styles.loginButton,
+              (pressed || loading) && styles.pressed,
+            ]}>
+            <Text style={styles.loginButtonLabel}>
+              {loading ? 'Signing in...' : 'Login'}
+            </Text>
+            <MaterialCommunityIcons
+              name="chevron-right"
+              size={29}
+              color="#FFFFFF"
+            />
+          </Pressable>
+
+          <View
+            style={[
+              styles.accountRow,
+              isNarrowScreen && styles.accountRowNarrow,
+            ]}>
+            <Text style={styles.accountText}>Don&apos;t have an account?</Text>
+            <Pressable
+              accessibilityLabel="Register as student"
+              accessibilityRole="button"
+              onPress={() => navigation.navigate('StudentVerification')}>
+              <Text style={styles.contactText}>Register as student</Text>
+            </Pressable>
+          </View>
+        </View>
       </View>
     </Screen>
   );
 };
 
+const Brand = ({short}: {short: boolean}) => (
+  <View style={[styles.brand, short && styles.brandShort]}>
+    <View style={styles.logoStage}>
+      <View style={styles.logoGlowOuter} />
+      <View style={styles.logoGlowInner} />
+      <Text style={[styles.sparkle, styles.sparkleTop]}>✦</Text>
+      <Text style={[styles.sparkle, styles.sparkleLeft]}>✦</Text>
+      <Text style={[styles.sparkle, styles.sparkleRight]}>✦</Text>
+      <Image
+        resizeMode="contain"
+        source={classTrackLogo}
+        style={styles.brandLogo}
+      />
+    </View>
+    <View style={styles.taglineRow}>
+      <View style={styles.taglineLine} />
+      <View style={styles.taglineDot} />
+      <View style={styles.taglineLine} />
+    </View>
+    <Text style={styles.brandSubtitle}>Attendance. Activities. Progress.</Text>
+  </View>
+);
+
 const styles = StyleSheet.create({
+  content: {
+    flexGrow: 1,
+    marginHorizontal: -20,
+    marginTop: -20,
+    overflow: 'hidden',
+    padding: 0,
+  },
+  contentNarrow: {marginHorizontal: -20},
+  contentShort: {paddingBottom: 18},
+  backgroundImage: {bottom: 0, left: 0, position: 'absolute', right: 0, top: 0},
+  backgroundImageContent: {opacity: 1},
+  brand: {alignItems: 'center', marginTop: 54},
+  brandShort: {marginTop: 20},
+  logoStage: {alignItems: 'center', height: 270, justifyContent: 'center', width: 270},
+  logoGlowOuter: {
+    backgroundColor: 'rgba(255,255,255,0.26)',
+    borderRadius: 112,
+    height: 224,
+    position: 'absolute',
+    width: 224,
+  },
+  logoGlowInner: {
+    backgroundColor: 'rgba(255,255,255,0.42)',
+    borderRadius: 83,
+    height: 166,
+    position: 'absolute',
+    width: 166,
+  },
+  sparkle: {
+    color: '#FFFFFF',
+    fontSize: 22,
+    position: 'absolute',
+    textShadowColor: 'rgba(255,255,255,0.95)',
+    textShadowOffset: {height: 0, width: 0},
+    textShadowRadius: 8,
+  },
+  sparkleTop: {right: 38, top: 37},
+  sparkleLeft: {left: 27, top: 119},
+  sparkleRight: {right: 21, top: 155},
+  brandLogo: {height: 270, width: 270},
+  taglineRow: {alignItems: 'center', flexDirection: 'row', marginTop: -48},
+  taglineLine: {backgroundColor: '#2878E9', height: 1, width: 84},
+  taglineDot: {backgroundColor: '#1460E8', borderRadius: 4, height: 8, marginHorizontal: 12, width: 8},
+  brandSubtitle: {
+    color: '#122D65',
+    fontSize: 16,
+    fontWeight: '500',
+    marginTop: 10,
+  },
+  sheet: {
+    backgroundColor: 'rgba(255,255,255,0.97)',
+    borderRadius: 34,
+    elevation: 8,
+    marginHorizontal: 28,
+    padding: 24,
+    shadowColor: '#34537F',
+    shadowOffset: {height: 8, width: 0},
+    shadowOpacity: 0.17,
+    shadowRadius: 18,
+  },
+  sheetShort: {padding: 20},
+  welcomeRow: {alignItems: 'center', flexDirection: 'row'},
+  welcomeIcon: {
+    alignItems: 'center',
+    backgroundColor: '#EEF4FF',
+    borderRadius: 31,
+    height: 58,
+    justifyContent: 'center',
+    width: 58,
+  },
+  welcomeCopy: {flex: 1, marginLeft: 15, minWidth: 0},
+  title: {color: '#102653', fontSize: 27, fontWeight: '900', letterSpacing: -0.8},
+  subtitle: {color: '#657595', fontSize: 15, fontWeight: '500', marginTop: 3},
+  form: {marginTop: 22},
+  passwordField: {marginTop: 14},
+  field: {
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderColor: '#DCE6F5',
+    borderRadius: 16,
+    borderWidth: 1,
+    flexDirection: 'row',
+    minHeight: 70,
+    paddingHorizontal: 16,
+  },
+  fieldCopy: {flex: 1, marginLeft: 14, minWidth: 0},
+  fieldLabel: {color: '#637391', fontSize: 14, fontWeight: '700'},
+  input: {color: '#152C5A', fontSize: 17, minHeight: 31, padding: 0},
+  eyeButton: {alignItems: 'center', height: 42, justifyContent: 'center', width: 42},
+  helperText: {marginTop: 2, paddingHorizontal: 0},
+  forgotButton: {alignSelf: 'flex-end', marginBottom: 18, marginTop: 12},
+  forgotText: {color: '#075FE4', fontSize: 15, fontWeight: '800'},
+  loginButton: {
+    alignItems: 'center',
+    backgroundColor: '#075FE4',
+    borderRadius: 16,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    minHeight: 58,
+  },
+  loginButtonLabel: {color: '#FFFFFF', fontSize: 20, fontWeight: '900', marginRight: 9},
   accountRow: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: 12,
+    gap: 10,
     justifyContent: 'center',
-    marginTop: 26,
+    marginTop: 22,
   },
-  accountRowNarrow: {
-    flexDirection: 'column',
-    gap: 4,
-  },
-  accountRowShort: {
-    marginTop: 18,
-  },
-  accountText: {
-    color: '#7B8191',
-    fontSize: 17,
-    fontWeight: '500',
-  },
-  backgroundCircle: {
-    backgroundColor: '#DDE8FC',
-    borderRadius: 88,
-    height: 176,
-    opacity: 0.76,
-    position: 'absolute',
-    right: -84,
-    top: 88,
-    width: 176,
-  },
-  backgroundCircleShort: {
-    top: 58,
-  },
-  backgroundDot: {
-    backgroundColor: '#C9D9F7',
-    borderRadius: 4,
-    height: 8,
-    margin: 8,
-    width: 8,
-  },
-  backgroundDotGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    left: 38,
-    position: 'absolute',
-    top: 104,
-    width: 76,
-  },
-  backgroundDotGridNarrow: {
-    left: 24,
-  },
-  backgroundDotGridShort: {
-    top: 76,
-  },
-  brand: {
-    alignItems: 'center',
-    marginTop: 40,
-  },
-  brandShort: {
-    marginTop: 16,
-  },
-  brandSubtitle: {
-    color: '#7B8191',
-    fontSize: 17,
-    fontWeight: '500',
-    marginTop: 6,
-  },
-  clock: {
-    alignSelf: 'center',
-    backgroundColor: '#FFFFFF',
-    borderColor: '#AFC6EE',
-    borderRadius: 10,
-    borderWidth: 2,
-    height: 20,
-    marginTop: 10,
-    width: 20,
-  },
-  contactText: {
-    color: '#075FE4',
-    fontSize: 17,
-    fontWeight: '800',
-  },
-  content: {
-    flexGrow: 1,
-    overflow: 'hidden',
-    paddingHorizontal: 28,
-    paddingTop: 16,
-  },
-  contentNarrow: {
-    paddingHorizontal: 20,
-  },
-  contentShort: {
-    paddingTop: 8,
-  },
-  useAnotherAccountButton: {
-    alignSelf: 'center',
-    marginTop: 18,
-    padding: 6,
-  },
-  useAnotherAccountText: {
-    color: '#2563EB',
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  verificationButton: {
-    alignSelf: 'stretch',
-    marginTop: 18,
-  },
-  verificationButtonContent: {
-    minHeight: 56,
-  },
-  verificationCard: {
-    alignItems: 'center',
-    alignSelf: 'stretch',
-    backgroundColor: '#FFFFFF',
-    borderColor: '#DDE8F8',
-    borderRadius: 18,
-    borderWidth: 1,
-    elevation: 4,
-    padding: 24,
-    shadowColor: '#7685A3',
-    shadowOffset: {height: 8, width: 0},
-    shadowOpacity: 0.12,
-    shadowRadius: 18,
-  },
-  verificationContent: {
-    justifyContent: 'center',
-  },
-  verificationError: {
-    color: '#B91C1C',
-  },
-  verificationFeedback: {
-    fontSize: 14,
-    fontWeight: '700',
-    lineHeight: 20,
-    marginTop: 16,
-    textAlign: 'center',
-  },
+  accountRowNarrow: {flexDirection: 'column', gap: 4},
+  accountText: {color: '#657595', fontSize: 15, fontWeight: '500'},
+  contactText: {color: '#075FE4', fontSize: 15, fontWeight: '800'},
+  verificationContent: {justifyContent: 'center'},
+  verificationSheet: {alignItems: 'center', marginTop: 30},
   verificationIcon: {
     alignItems: 'center',
-    backgroundColor: '#E8F1FF',
-    borderRadius: 22,
-    height: 72,
+    backgroundColor: '#EEF4FF',
+    borderRadius: 28,
+    height: 74,
     justifyContent: 'center',
-    width: 72,
+    width: 74,
   },
+  verificationTitle: {color: '#102653', fontSize: 24, fontWeight: '900', marginTop: 18},
   verificationMessage: {
-    color: '#52617E',
+    color: '#657595',
     fontSize: 15,
     fontWeight: '600',
     lineHeight: 22,
-    marginTop: 10,
+    marginTop: 9,
     textAlign: 'center',
   },
-  verificationSuccess: {
-    color: '#15803D',
-  },
-  verificationTitle: {
-    color: '#081638',
-    fontSize: 22,
-    fontWeight: '900',
-    marginTop: 18,
-  },
-  eyeButton: {
-    alignItems: 'center',
-    height: 44,
-    justifyContent: 'center',
-    width: 44,
-  },
-  flag: {
-    backgroundColor: '#7DA3E5',
-    height: 11,
-    left: 111,
-    position: 'absolute',
-    top: -26,
-    width: 22,
-  },
-  flagPole: {
-    backgroundColor: '#7DA3E5',
-    height: 34,
-    left: 110,
-    position: 'absolute',
-    top: -26,
-    width: 3,
-  },
-  footerHill: {
-    backgroundColor: '#E4EEFC',
-    borderTopLeftRadius: 120,
-    borderTopRightRadius: 120,
-    bottom: -42,
-    height: 126,
-    left: -50,
-    position: 'absolute',
-    right: -50,
-  },
-  footerScene: {
-    height: 150,
-    marginHorizontal: -28,
-    marginTop: 20,
-    overflow: 'hidden',
-  },
-  footerSceneNarrow: {
-    marginHorizontal: -20,
-  },
-  footerSceneShort: {
-    height: 104,
-    marginTop: 10,
-  },
-  forgotButton: {
-    alignSelf: 'flex-end',
-    marginBottom: 28,
-  },
-  forgotText: {
-    color: '#075FE4',
-    fontSize: 17,
-    fontWeight: '800',
-  },
-  form: {
-    marginTop: 40,
-  },
-  formShort: {
-    marginTop: 24,
-  },
-  helperText: {
-    minHeight: 28,
-    paddingHorizontal: 0,
-  },
-  homeIndicator: {
-    alignSelf: 'center',
-    backgroundColor: '#000000',
-    borderRadius: 3,
-    bottom: 10,
-    height: 6,
-    position: 'absolute',
-    width: 152,
-  },
-  input: {
-    color: '#16264B',
-    flex: 1,
-    fontSize: 18,
-    minHeight: 60,
-    paddingHorizontal: 20,
-  },
-  inputNarrow: {
-    paddingHorizontal: 14,
-  },
-  inputWrap: {
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderColor: '#E6ECF6',
-    borderRadius: 12,
-    borderWidth: 1,
-    elevation: 6,
-    flexDirection: 'row',
-    minHeight: 68,
-    paddingHorizontal: 22,
-    shadowColor: '#8BA0BE',
-    shadowOffset: {height: 6, width: 0},
-    shadowOpacity: 0.17,
-    shadowRadius: 14,
-  },
-  inputWrapNarrow: {
-    paddingHorizontal: 16,
-  },
-  label: {
-    color: '#16264B',
-    fontSize: 18,
-    fontWeight: '900',
-    marginBottom: 12,
-  },
-  loginButton: {
-    borderRadius: 12,
-    elevation: 0,
-  },
-  loginButtonContent: {
-    minHeight: 66,
-  },
-  loginButtonLabel: {
-    fontSize: 19,
-    fontWeight: '900',
-  },
-  logoImage: {
-    height: 220,
-    width: 220,
-  },
-  passwordLabel: {
-    marginTop: 20,
-  },
-  passwordLabelShort: {
-    marginTop: 14,
-  },
-  schoolBuilding: {
-    backgroundColor: '#D3E2FA',
-    borderColor: '#B8CEF3',
-    borderRadius: 5,
-    borderWidth: 1,
-    bottom: 20,
-    height: 78,
-    left: '50%',
-    marginLeft: -118,
-    position: 'absolute',
-    width: 236,
-  },
-  schoolDoor: {
-    alignSelf: 'center',
-    backgroundColor: '#9DBCEB',
-    borderTopLeftRadius: 8,
-    borderTopRightRadius: 8,
-    bottom: 0,
-    height: 28,
-    position: 'absolute',
-    width: 30,
-  },
-  schoolRoof: {
-    alignSelf: 'center',
-    backgroundColor: '#C1D5F6',
-    height: 30,
-    marginTop: -18,
-    transform: [{rotate: '45deg'}],
-    width: 30,
-  },
-  subtitle: {
-    color: '#7B8191',
-    fontSize: 20,
-    fontWeight: '500',
-    marginTop: 10,
-    textAlign: 'center',
-  },
-  title: {
-    color: '#16264B',
-    fontSize: 32,
-    fontWeight: '900',
-    letterSpacing: 0,
-    textAlign: 'center',
-  },
-  titleShort: {
-    fontSize: 28,
-  },
-  treeLeft: {
-    alignItems: 'center',
-    bottom: 24,
-    left: 52,
-    position: 'absolute',
-  },
-  treeRight: {
-    alignItems: 'center',
-    bottom: 24,
-    position: 'absolute',
-    right: 58,
-  },
-  treeTop: {
-    backgroundColor: '#8EB0E9',
-    borderRadius: 20,
-    height: 52,
-    width: 28,
-  },
-  treeTrunk: {
-    backgroundColor: '#79A0DF',
-    height: 30,
-    marginTop: -4,
-    width: 4,
-  },
-  welcome: {
-    alignItems: 'center',
-    marginTop: 50,
-  },
-  welcomeShort: {
-    marginTop: 24,
-  },
-  window: {
-    backgroundColor: '#9DBCEB',
-    borderRadius: 2,
-    height: 14,
-    width: 16,
-  },
-  windowRow: {
-    bottom: 28,
-    flexDirection: 'row',
-    gap: 12,
-    left: 36,
-    position: 'absolute',
-  },
+  verificationFeedback: {fontSize: 14, fontWeight: '700', lineHeight: 20, marginTop: 16, textAlign: 'center'},
+  verificationError: {color: '#B91C1C'},
+  verificationSuccess: {color: '#15803D'},
+  verificationButton: {alignSelf: 'stretch', marginTop: 18},
+  useAnotherAccountButton: {marginTop: 18, padding: 6},
+  useAnotherAccountText: {color: '#2563EB', fontSize: 14, fontWeight: '800'},
+  pressed: {opacity: 0.78, transform: [{scale: 0.99}]},
 });

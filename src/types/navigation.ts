@@ -60,6 +60,7 @@ export type StudentStackParamList = {
   MyActivities: undefined;
   MyScores: undefined;
   StudentAnnouncements: undefined;
+  StudentAnnouncementDetails: {announcement: AnnouncementRecord};
   StudentProfile: undefined;
   SubmitActivity: {activity: ActivityRecord};
 };

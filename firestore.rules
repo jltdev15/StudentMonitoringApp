@@ -131,7 +131,7 @@ service cloud.firestore {
     match /attendance/{attendanceId} {
       allow read: if isTeacher() || isOwnStudentRecord(resource.data.studentId);
       allow create, update: if ownsClass(request.resource.data.classId);
-      allow delete: if false;
+      allow delete: if ownsClass(resource.data.classId);
     }
 
     match /activities/{activityId} {
@@ -175,8 +175,9 @@ service cloud.firestore {
       allow update: if isTeacher()
         && resource.data.postedBy == request.auth.uid
         && request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['title', 'message', 'updatedAt']);
-      allow delete: if false;
+          .hasOnly(['title', 'message', 'featured', 'updatedAt']);
+      allow delete: if isTeacher()
+        && resource.data.postedBy == request.auth.uid;
     }
   }
 }

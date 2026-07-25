@@ -10,6 +10,8 @@ const announcementMessage = (announcement, announcementId) => ({
   data: {
     announcementId,
     classId: announcement.classId || '',
+    announcementType: announcement.announcementType || 'General',
+    featured: String(announcement.featured === true),
     type: 'announcement',
   },
   notification: {

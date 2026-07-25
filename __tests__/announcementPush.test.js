@@ -11,6 +11,8 @@ it('targets a general announcement to all students', () => {
   const message = announcementMessage(
     {
       classId: null,
+      announcementType: 'Academic',
+      featured: true,
       message: 'School will close early today.',
       title: 'Important update',
     },
@@ -20,7 +22,9 @@ it('targets a general announcement to all students', () => {
   expect(message.topic).toBe('students-all');
   expect(message.data).toEqual({
     announcementId: 'announcement-1',
+    announcementType: 'Academic',
     classId: '',
+    featured: 'true',
     type: 'announcement',
   });
 });

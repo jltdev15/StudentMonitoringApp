@@ -49,6 +49,7 @@ export const ClassListScreen = ({navigation}: Props) => {
         variant="teacher"
         title="Classes"
         subtitle="Manage your active classes."
+        showBack={false}
         rightIcon="plus"
         onRightPress={() => navigation.navigate('AddClass')}
       />

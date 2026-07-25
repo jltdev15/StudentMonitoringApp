@@ -11,6 +11,7 @@ export type ActivitySubmissionStatus =
 export type ClassStatus = 'active' | 'archived';
 export type ActivityStatus = 'active' | 'closed';
 export type AnnouncementTargetRole = 'all' | 'students' | 'teachers';
+export type AnnouncementType = 'General' | 'Academic' | 'Events';
 export type Timestamp = FirebaseFirestoreTypes.Timestamp | Date | null;
 
 export type UserProfile = {
@@ -113,6 +114,8 @@ export type AnnouncementRecord = {
   message: string;
   postedBy: string;
   targetRole: AnnouncementTargetRole;
+  announcementType?: AnnouncementType;
+  featured?: boolean;
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
 };
