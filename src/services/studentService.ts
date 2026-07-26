@@ -8,7 +8,13 @@ import {
   updateDoc,
   where,
 } from '@react-native-firebase/firestore';
-import {collections} from '../config/firebase';
+import {
+  getDownloadURL,
+  getStorage,
+  putFile,
+  ref as storageRef,
+} from '@react-native-firebase/storage';
+import {collections, firebaseApp} from '../config/firebase';
 import {RecordStatus, StudentRecord} from '../types/models';
 import {col, docRef, mapDoc, now} from './firestoreHelpers';
 
@@ -56,6 +62,53 @@ export const updateStudent = (
     ...payload,
     updatedAt: now(),
   });
+
+export type StudentProfileUpdate = Partial<Pick<
+  StudentRecord,
+  'contactNumber' | 'photoUrl'
+>> & {
+  dateOfBirth?: string;
+  gender?: string;
+};
+
+export type ProfilePhotoImage = {
+  contentType: string;
+  fileSize?: number;
+  uri: string;
+};
+
+export const MAX_PROFILE_PHOTO_BYTES = 5 * 1024 * 1024;
+
+export const studentProfilePhotoPath = (studentId: string) =>
+  `student-profile-images/${studentId}/avatar`;
+
+export const updateStudentProfile = (
+  studentId: string,
+  payload: StudentProfileUpdate,
+) => updateStudent(studentId, payload);
+
+const profilePhotoStorage = getStorage(firebaseApp);
+
+export const uploadStudentProfilePhoto = async (
+  studentId: string,
+  image: ProfilePhotoImage,
+) => {
+  if (!image.uri || !image.contentType.startsWith('image/')) {
+    throw new Error('Please choose a valid image file.');
+  }
+  if (image.fileSize && image.fileSize > MAX_PROFILE_PHOTO_BYTES) {
+    throw new Error('Profile photos must be 5 MB or smaller.');
+  }
+
+  const profilePhotoRef = storageRef(
+    profilePhotoStorage,
+    studentProfilePhotoPath(studentId),
+  );
+  await putFile(profilePhotoRef, image.uri, {contentType: image.contentType});
+  const photoUrl = await getDownloadURL(profilePhotoRef);
+  await updateStudentProfile(studentId, {photoUrl});
+  return photoUrl;
+};
 
 export const archiveStudent = (studentId: string) =>
   updateStudent(studentId, {status: 'inactive'});

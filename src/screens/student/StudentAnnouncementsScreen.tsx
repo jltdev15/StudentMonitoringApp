@@ -180,9 +180,6 @@ const AnnouncementRow = ({
       onPress={onPress}
       style={styles.row}
       testID={`announcement-row-${announcement.id}`}>
-      <View style={[styles.rowIcon, {backgroundColor: meta.iconBackground}]}>
-        <MaterialCommunityIcons color={meta.color} name={meta.icon} size={31} />
-      </View>
       <View style={styles.rowCopy}>
         <View style={[styles.categoryChip, {backgroundColor: meta.chip}]}>
           <Text style={[styles.categoryLabel, {color: meta.color}]}>{meta.label}</Text>
@@ -449,12 +446,11 @@ const styles = StyleSheet.create({
   placeholderIcon: {alignItems: 'center', backgroundColor: '#EAF2FF', borderRadius: 42, height: 84, justifyContent: 'center', position: 'relative', width: 84},
   placeholderMessage: {color: '#71809B', fontSize: 14, lineHeight: 20, marginTop: 8, textAlign: 'center'},
   placeholderTitle: {color: '#122959', fontSize: 19, fontWeight: '900', marginTop: 18, textAlign: 'center'},
-  row: {alignItems: 'center', flexDirection: 'row', gap: 12, paddingHorizontal: 12, paddingVertical: 11},
+  row: {alignItems: 'center', flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingVertical: 13},
   rowCopy: {flex: 1, minWidth: 0},
   rowDate: {alignItems: 'center', flexDirection: 'row', gap: 5, marginTop: 6},
   rowDateText: {color: '#697B9E', flex: 1, fontSize: 11, fontWeight: '700'},
-  rowDivider: {backgroundColor: '#E8EDF5', height: 1, marginLeft: 82},
-  rowIcon: {alignItems: 'center', borderRadius: 10, height: 78, justifyContent: 'center', width: 78},
+  rowDivider: {backgroundColor: '#E8EDF5', height: 1, marginHorizontal: 16},
   rowMessage: {color: '#627493', fontSize: 12, lineHeight: 16},
   rowTitle: {color: '#132758', fontSize: 15, fontWeight: '900', marginBottom: 2},
   screenContent: {paddingBottom: 30, paddingTop: 12},

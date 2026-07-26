@@ -2,6 +2,7 @@ import type {Timestamp} from 'firebase/firestore';
 
 export type AttendanceStatus = 'present' | 'absent' | 'late' | 'excused';
 export type SubmissionStatus = 'submitted' | 'missing' | 'late' | 'excused';
+export type ActivityCategory = 'peta' | 'quiz' | 'coding';
 
 export type TeacherProfile = {
   uid: string;
@@ -52,6 +53,7 @@ export type ActivityRecord = {
   dueDate: Timestamp | Date | null;
   totalPoints: number;
   createdBy: string;
+  activityCategory?: ActivityCategory;
   status: 'active' | 'closed';
 };
 

@@ -1,11 +1,10 @@
-import {PermissionsAndroid, Platform} from 'react-native';
+import {Platform} from 'react-native';
 import notifee, {AndroidImportance, EventType} from '@notifee/react-native';
 import {
   getInitialNotification,
   getMessaging,
   onMessage,
   onNotificationOpenedApp,
-  requestPermission,
   subscribeToTopic,
   unsubscribeFromTopic,
 } from '@react-native-firebase/messaging';
@@ -40,20 +39,6 @@ const ensureAnnouncementChannel = () =>
 export const initializeAnnouncementNotifications = async () => {
   if (Platform.OS === 'android') {
     await ensureAnnouncementChannel();
-  }
-  await requestAnnouncementNotificationPermission();
-};
-
-export const requestAnnouncementNotificationPermission = async () => {
-  const currentMessaging = messaging();
-  if (Platform.OS === 'android' && Platform.Version >= 33) {
-    await PermissionsAndroid.request(
-      PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
-    );
-    return;
-  }
-  if (Platform.OS === 'ios') {
-    await requestPermission(currentMessaging);
   }
 };
 

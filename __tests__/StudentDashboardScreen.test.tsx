@@ -1,5 +1,5 @@
 import React from 'react';
-import {ImageBackground, ScrollView} from 'react-native';
+import {Image, ImageBackground, ScrollView} from 'react-native';
 import renderer, {act} from 'react-test-renderer';
 import {StudentDashboardScreen} from '../src/screens/student/StudentDashboardScreen';
 import {useAuth} from '../src/context/AuthContext';
@@ -34,6 +34,8 @@ const mockedGetSubmissionsByStudent = getSubmissionsByStudent as jest.Mock;
 const mockedGetStudentAttendance = getStudentAttendance as jest.Mock;
 const mockedCalculateAverageScore = calculateAverageScore as jest.Mock;
 const mockedCountByStatus = countByStatus as jest.Mock;
+const dashboardHeaderDay = require('../src/assets/images/dashboard-header.webp');
+const dashboardHeaderDark = require('../src/assets/images/dashboard-header-dark.webp');
 
 const tabNavigation = {navigate: jest.fn()};
 const navigation = {
@@ -107,6 +109,10 @@ beforeEach(() => {
   mockedCalculateAverageScore.mockReturnValue(92);
 });
 
+afterEach(() => {
+  jest.useRealTimers();
+});
+
 it('renders cumulative overview totals and the nearest upcoming activity', async () => {
   const tree = await renderDashboard();
   const text = renderedText(tree.toJSON());
@@ -131,6 +137,23 @@ it('renders the supplied school-scene header artwork behind the live hero conten
   expect(renderedText(tree.toJSON())).toContain('Maria Santos');
   expect(renderedText(tree.toJSON())).toContain('Today is');
 });
+
+it.each([
+  [new Date(2026, 6, 25, 5, 59), 'Good evening,', dashboardHeaderDark],
+  [new Date(2026, 6, 25, 6, 0), 'Good morning,', dashboardHeaderDay],
+  [new Date(2026, 6, 25, 12, 0), 'Good afternoon,', dashboardHeaderDay],
+  [new Date(2026, 6, 25, 18, 0), 'Good evening,', dashboardHeaderDark],
+])(
+  'uses the matching header and greeting at %s',
+  async (time, greeting, headerImage) => {
+    jest.useFakeTimers();
+    jest.setSystemTime(time);
+
+    const tree = await renderDashboard();
+    expect(renderedText(tree.toJSON())).toContain(greeting);
+    expect(tree.root.findByType(ImageBackground).props.source).toBe(headerImage);
+  },
+);
 
 it('keeps zero-value overview cards visible when no records exist', async () => {
   mockedCountByStatus.mockReturnValue({});
@@ -162,6 +185,26 @@ it('keeps a long student name visible in the redesigned hero', async () => {
   const tree = await renderDashboard();
 
   expect(renderedText(tree.toJSON())).toContain('Dela Cruz, Juan Lorenzo Miguel');
+});
+
+it('uses the saved student photo in the dashboard avatar', async () => {
+  mockedUseAuth.mockReturnValue({
+    profile: {
+      fullName: 'Maria Santos',
+      studentId: 'student-1',
+      classIds: ['class-1'],
+    },
+    student: {
+      id: 'student-1',
+      photoUrl: 'https://example.com/avatar.jpg',
+    },
+  });
+
+  const tree = await renderDashboard();
+  expect(
+    tree.root.findAllByProps({accessibilityLabel: 'Student profile photo'}),
+  ).not.toHaveLength(0);
+  expect(tree.root.findAllByType(Image)).not.toHaveLength(0);
 });
 
 it('wires all dashboard destinations and supports pull-to-refresh', async () => {

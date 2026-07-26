@@ -14,21 +14,51 @@ type Props = NativeStackScreenProps<
   'StudentAnnouncementDetails'
 >;
 
+const announcementStyles = {
+  Academic: {
+    background: '#E6F0FF',
+    color: '#2166D8',
+    icon: 'book-open-page-variant-outline',
+  },
+  Events: {
+    background: '#E5F9ED',
+    color: '#129B4A',
+    icon: 'calendar-check-outline',
+  },
+  General: {
+    background: '#F1E8FF',
+    color: '#7B3FF2',
+    icon: 'bullhorn-outline',
+  },
+} as const;
+
 export const StudentAnnouncementDetailsScreen = ({route}: Props) => {
   const {announcement} = route.params;
+  const type = announcement.announcementType || 'General';
+  const typeStyle = announcementStyles[type];
 
   return (
     <Screen>
       <AppHeader title="Announcement" subtitle="Class and school update" />
       <AppCard style={styles.card}>
-        <View style={styles.iconTile}>
-          <MaterialCommunityIcons
-            color="#2563EB"
-            name="bullhorn-outline"
-            size={29}
-          />
+        <View style={styles.badgeRow}>
+          <View style={[styles.typeBadge, {backgroundColor: typeStyle.background}]}>
+            <MaterialCommunityIcons
+              color={typeStyle.color}
+              name={typeStyle.icon}
+              size={14}
+            />
+            <Text style={[styles.typeLabel, {color: typeStyle.color}]}>
+              {type}
+            </Text>
+          </View>
+          {announcement.featured ? (
+            <View style={styles.featuredBadge}>
+              <MaterialCommunityIcons color="#9A6800" name="star" size={13} />
+              <Text style={styles.featuredLabel}>FEATURED</Text>
+            </View>
+          ) : null}
         </View>
-        <Text style={styles.eyebrow}>ANNOUNCEMENT</Text>
         <Text style={styles.title}>{announcement.title}</Text>
         <View style={styles.dateRow}>
           <MaterialCommunityIcons
@@ -41,6 +71,7 @@ export const StudentAnnouncementDetailsScreen = ({route}: Props) => {
           </Text>
         </View>
         <View style={styles.divider} />
+        <Text style={styles.messageLabel}>MESSAGE</Text>
         <Text style={styles.message}>{announcement.message}</Text>
       </AppCard>
     </Screen>
@@ -48,12 +79,16 @@ export const StudentAnnouncementDetailsScreen = ({route}: Props) => {
 };
 
 const styles = StyleSheet.create({
+  badgeRow: {alignItems: 'center', flexDirection: 'row', flexWrap: 'wrap', gap: 8},
   card: {padding: 22},
   date: {color: '#657797', fontSize: 13, fontWeight: '700'},
-  dateRow: {alignItems: 'center', flexDirection: 'row', gap: 7, marginTop: 12},
-  divider: {backgroundColor: '#E5ECF6', height: 1, marginVertical: 20},
-  eyebrow: {color: '#2563EB', fontSize: 11, fontWeight: '900', letterSpacing: 0.7, marginTop: 16},
-  iconTile: {alignItems: 'center', backgroundColor: '#EAF2FF', borderRadius: 14, height: 54, justifyContent: 'center', width: 54},
-  message: {color: '#314665', fontSize: 16, lineHeight: 25},
-  title: {color: '#11285B', fontSize: 24, fontWeight: '900', letterSpacing: -0.35, lineHeight: 30, marginTop: 7},
+  dateRow: {alignItems: 'center', flexDirection: 'row', gap: 7, marginTop: 13},
+  divider: {backgroundColor: '#E5ECF6', height: 1, marginVertical: 22},
+  featuredBadge: {alignItems: 'center', backgroundColor: '#FFF7DE', borderColor: '#F2D37B', borderRadius: 7, borderWidth: 1, flexDirection: 'row', gap: 4, paddingHorizontal: 8, paddingVertical: 4},
+  featuredLabel: {color: '#9A6800', fontSize: 10, fontWeight: '900', letterSpacing: 0.45},
+  message: {color: '#314665', fontSize: 16, lineHeight: 26},
+  messageLabel: {color: '#71819D', fontSize: 11, fontWeight: '900', letterSpacing: 0.7, marginBottom: 10},
+  title: {color: '#11285B', fontSize: 25, fontWeight: '900', letterSpacing: -0.45, lineHeight: 32, marginTop: 15},
+  typeBadge: {alignItems: 'center', borderRadius: 7, flexDirection: 'row', gap: 5, paddingHorizontal: 8, paddingVertical: 5},
+  typeLabel: {fontSize: 11, fontWeight: '900'},
 });

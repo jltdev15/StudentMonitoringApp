@@ -10,6 +10,7 @@ export type ActivitySubmissionStatus =
   | 'excused';
 export type ClassStatus = 'active' | 'archived';
 export type ActivityStatus = 'active' | 'closed';
+export type ActivityCategory = 'peta' | 'quiz' | 'coding';
 export type AnnouncementTargetRole = 'all' | 'students' | 'teachers';
 export type AnnouncementType = 'General' | 'Academic' | 'Events';
 export type Timestamp = FirebaseFirestoreTypes.Timestamp | Date | null;
@@ -51,6 +52,9 @@ export type StudentRecord = {
   contactNumber: string;
   guardianName: string;
   guardianContact: string;
+  dateOfBirth?: string;
+  gender?: string;
+  photoUrl?: string;
   classIds: string[];
   status: RecordStatus;
   createdAt?: Timestamp;
@@ -77,6 +81,7 @@ export type ActivityRecord = {
   dueDate: Timestamp;
   totalPoints: number;
   createdBy: string;
+  activityCategory?: ActivityCategory;
   acceptsImageAttachments?: boolean;
   status: ActivityStatus;
   createdAt?: Timestamp;

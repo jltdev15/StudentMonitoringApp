@@ -1,5 +1,6 @@
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import {
+  Image,
   ImageBackground,
   Pressable,
   RefreshControl,
@@ -30,7 +31,8 @@ import {StudentStackParamList} from '../../types/navigation';
 import {colors} from '../../utils/constants';
 import {toReadableDate} from '../../utils/dateUtils';
 
-const dashboardHeader = require('../../assets/images/dashboard-header.webp');
+const dashboardHeaderDay = require('../../assets/images/dashboard-header.webp');
+const dashboardHeaderDark = require('../../assets/images/dashboard-header-dark.webp');
 
 type Props = NativeStackScreenProps<StudentStackParamList, 'StudentHome'>;
 type StatKey = 'present' | 'absent' | 'late' | 'average';
@@ -142,15 +144,30 @@ const quickActions: {
   },
 ];
 
-const getGreeting = () => {
-  const hour = new Date().getHours();
+const getHeroPresentation = (now = new Date()) => {
+  const hour = now.getHours();
+  if (hour < 6) {
+    return {
+      greeting: 'Good evening,',
+      headerImage: dashboardHeaderDark,
+    };
+  }
   if (hour < 12) {
-    return 'Good morning,';
+    return {
+      greeting: 'Good morning,',
+      headerImage: dashboardHeaderDay,
+    };
   }
   if (hour < 18) {
-    return 'Good afternoon,';
+    return {
+      greeting: 'Good afternoon,',
+      headerImage: dashboardHeaderDay,
+    };
   }
-  return 'Good evening,';
+  return {
+    greeting: 'Good evening,',
+    headerImage: dashboardHeaderDark,
+  };
 };
 
 const dateFromTimestamp = (value: ActivityRecord['dueDate']) => {
@@ -204,6 +221,7 @@ export const StudentDashboardScreen = ({navigation}: Props) => {
   });
   const [attendanceTotal, setAttendanceTotal] = useState(0);
 
+  const heroPresentation = getHeroPresentation();
   const today = useMemo(() => new Date(), []);
   const readableDate = today.toLocaleDateString(undefined, {
     month: 'long',
@@ -333,7 +351,7 @@ export const StudentDashboardScreen = ({navigation}: Props) => {
         style={styles.scroll}>
         <ImageBackground
           resizeMode="cover"
-          source={dashboardHeader}
+          source={heroPresentation.headerImage}
           style={[styles.hero, isCompact && styles.heroCompact]}>
           <View accessibilityElementsHidden style={styles.heroScrim} />
           <Pressable
@@ -356,7 +374,7 @@ export const StudentDashboardScreen = ({navigation}: Props) => {
           </Pressable>
 
           <Text style={[styles.greeting, isCompact && styles.greetingCompact]}>
-            {getGreeting()}
+            {heroPresentation.greeting}
           </Text>
           <Text
             adjustsFontSizeToFit
@@ -382,19 +400,29 @@ export const StudentDashboardScreen = ({navigation}: Props) => {
                 styles.avatarInner,
                 isCompact && styles.avatarInnerCompact,
               ]}>
-              <MaterialCommunityIcons
-                name="school-outline"
-                size={isCompact ? 44 : 50}
-                color="rgba(255,255,255,0.38)"
-                style={styles.avatarSchoolIcon}
-              />
-              <Text
-                style={[
-                  styles.avatarInitials,
-                  isCompact && styles.avatarInitialsCompact,
-                ]}>
-                {initials}
-              </Text>
+              {student?.photoUrl ? (
+                <Image
+                  accessibilityLabel="Student profile photo"
+                  source={{uri: student.photoUrl}}
+                  style={styles.dashboardAvatarImage}
+                />
+              ) : (
+                <>
+                  <MaterialCommunityIcons
+                    name="school-outline"
+                    size={isCompact ? 44 : 50}
+                    color="rgba(255,255,255,0.38)"
+                    style={styles.avatarSchoolIcon}
+                  />
+                  <Text
+                    style={[
+                      styles.avatarInitials,
+                      isCompact && styles.avatarInitialsCompact,
+                    ]}>
+                    {initials}
+                  </Text>
+                </>
+              )}
             </View>
           </View>
         </ImageBackground>
@@ -747,6 +775,7 @@ const styles = StyleSheet.create({
     width: 120,
   },
   avatarInnerCompact: {borderRadius: 52, height: 104, width: 104},
+  dashboardAvatarImage: {height: '100%', width: '100%'},
   avatarSchoolIcon: {position: 'absolute', top: 21},
   avatarInitials: {
     color: '#FFFFFF',

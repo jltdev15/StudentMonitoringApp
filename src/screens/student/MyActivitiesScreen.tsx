@@ -13,6 +13,7 @@ import {
   getSubmissionsByStudent,
 } from '../../services/activityService';
 import {
+  ActivityCategory,
   ActivityRecord,
   ActivitySubmissionRecord,
 } from '../../types/models';
@@ -20,8 +21,8 @@ import {StudentStackParamList} from '../../types/navigation';
 import {toReadableDate} from '../../utils/dateUtils';
 
 type Props = NativeStackScreenProps<StudentStackParamList, 'MyActivities'>;
-type FeedFilter = 'all' | 'assignment' | 'quiz';
-type ActivityKind = 'assignment' | 'quiz';
+type FeedFilter = 'all' | ActivityCategory;
+type ActivityKind = ActivityCategory;
 
 type ActivityFeedItem = {
   activity: ActivityRecord;
@@ -30,16 +31,16 @@ type ActivityFeedItem = {
   type: 'activity';
 };
 
-const visibleLimit = 3;
-
 const filterTabs: {icon: string; key: FeedFilter; label: string}[] = [
   {icon: 'view-grid-outline', key: 'all', label: 'All'},
-  {icon: 'clipboard-text-outline', key: 'assignment', label: 'Assignments'},
-  {icon: 'help-circle-outline', key: 'quiz', label: 'Quizzes'},
+  {icon: 'clipboard-text-outline', key: 'peta', label: 'PETA'},
+  {icon: 'file-question-outline', key: 'quiz', label: 'Quizzes'},
+  {icon: 'code-tags', key: 'coding', label: 'Coding'},
 ];
 
 const activityKind = (activity: ActivityRecord): ActivityKind =>
-  /quiz/i.test(`${activity.title} ${activity.description}`) ? 'quiz' : 'assignment';
+  activity.activityCategory ||
+  (/quiz/i.test(`${activity.title} ${activity.description}`) ? 'quiz' : 'peta');
 
 const dateFromValue = (value: ActivityRecord['dueDate']) => {
   if (!value) {
@@ -47,9 +48,6 @@ const dateFromValue = (value: ActivityRecord['dueDate']) => {
   }
   return 'toDate' in value ? value.toDate() : value;
 };
-
-const startOfDay = (date: Date) =>
-  new Date(date.getFullYear(), date.getMonth(), date.getDate());
 
 const activityIsComplete = (
   activity: ActivityRecord,
@@ -77,7 +75,9 @@ const submissionStatusLabel = (submission?: ActivitySubmissionRecord) => {
 
 const kindStyle = (kind: ActivityKind) =>
   kind === 'quiz'
-    ? {color: '#119C52', icon: 'help-circle-outline', tint: '#EAF9F0'}
+    ? {color: '#119C52', icon: 'file-question-outline', tint: '#EAF9F0'}
+    : kind === 'coding'
+    ? {color: '#7C3AED', icon: 'code-tags', tint: '#F3EDFF'}
     : {color: '#1767F4', icon: 'clipboard-text-outline', tint: '#EDF3FF'};
 
 export const MyActivitiesScreen = ({navigation}: Props) => {
@@ -87,8 +87,6 @@ export const MyActivitiesScreen = ({navigation}: Props) => {
     [],
   );
   const [filter, setFilter] = useState<FeedFilter>('all');
-  const [showAllUpcoming, setShowAllUpcoming] = useState(false);
-  const [showAllCompleted, setShowAllCompleted] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -119,9 +117,7 @@ export const MyActivitiesScreen = ({navigation}: Props) => {
     () => Object.fromEntries(submissions.map(item => [item.activityId, item])),
     [submissions],
   );
-  const today = useMemo(() => startOfDay(new Date()), []);
-
-  const {completed, upcoming} = useMemo(() => {
+  const visibleActivities = useMemo(() => {
     const activityItems: ActivityFeedItem[] = activities.map(activity => ({
       activity,
       kind: activityKind(activity),
@@ -131,45 +127,17 @@ export const MyActivitiesScreen = ({navigation}: Props) => {
     const matchingActivities = activityItems.filter(item =>
       filter === 'all' || filter === item.kind,
     );
-    const upcomingActivities = matchingActivities
-      .filter(item => {
-        const dueDate = dateFromValue(item.activity.dueDate);
-        return (
-          !activityIsComplete(item.activity, item.submission) &&
-          dueDate !== null &&
-          startOfDay(dueDate).getTime() >= today.getTime()
-        );
-      })
-      .sort(
-        (first, second) =>
-          (dateFromValue(first.activity.dueDate)?.getTime() || 0) -
-          (dateFromValue(second.activity.dueDate)?.getTime() || 0),
-      );
-    const completedActivities = matchingActivities
-      .filter(item => activityIsComplete(item.activity, item.submission))
-      .sort(
-        (first, second) =>
-          (dateFromValue(second.activity.dueDate)?.getTime() || 0) -
-          (dateFromValue(first.activity.dueDate)?.getTime() || 0),
-      );
-    return {
-      completed: completedActivities,
-      upcoming: upcomingActivities,
-    };
-  }, [activities, filter, submissionByActivity, today]);
-
-  const visibleUpcoming = showAllUpcoming
-    ? upcoming
-    : upcoming.slice(0, visibleLimit);
-  const visibleCompleted = showAllCompleted
-    ? completed
-    : completed.slice(0, visibleLimit);
-
-  const selectFilter = (nextFilter: FeedFilter) => {
-    setFilter(nextFilter);
-    setShowAllUpcoming(false);
-    setShowAllCompleted(false);
-  };
+    return matchingActivities.sort((first, second) => {
+      const firstComplete = activityIsComplete(first.activity, first.submission);
+      const secondComplete = activityIsComplete(second.activity, second.submission);
+      if (firstComplete !== secondComplete) {
+        return firstComplete ? 1 : -1;
+      }
+      const firstDate = dateFromValue(first.activity.dueDate)?.getTime() || 0;
+      const secondDate = dateFromValue(second.activity.dueDate)?.getTime() || 0;
+      return firstComplete ? secondDate - firstDate : firstDate - secondDate;
+    });
+  }, [activities, filter, submissionByActivity]);
 
   if (loading) {
     return <LoadingState label="Loading activities..." />;
@@ -201,26 +169,15 @@ export const MyActivitiesScreen = ({navigation}: Props) => {
       typeof submission?.score === 'number'
         ? `${submission.score}/${activity.totalPoints}`
         : null;
-    const canOpenSubmission = activity.acceptsImageAttachments;
-
     return (
       <Pressable
-        accessibilityLabel={
-          canOpenSubmission
-            ? `Open activity ${activity.title}`
-            : `Activity ${activity.title}`
-        }
-        accessibilityRole={canOpenSubmission ? 'button' : undefined}
-        disabled={!canOpenSubmission}
+        accessibilityLabel={`Open activity ${activity.title}`}
+        accessibilityRole="button"
         key={activity.id}
-        onPress={
-          canOpenSubmission
-            ? () => navigation.navigate('SubmitActivity', {activity})
-            : undefined
-        }
+        onPress={() => navigation.navigate('StudentActivityDetails', {activity})}
         style={({pressed}) => [
           styles.feedCard,
-          canOpenSubmission && pressed && styles.pressed,
+          pressed && styles.pressed,
         ]}>
         <View style={[styles.feedIcon, {backgroundColor: style.tint}]}>
           <MaterialCommunityIcons name={style.icon} size={27} color={style.color} />
@@ -228,7 +185,11 @@ export const MyActivitiesScreen = ({navigation}: Props) => {
         <View style={styles.feedCopy}>
           <View style={[styles.categoryChip, {backgroundColor: style.tint}]}>
             <Text style={[styles.categoryText, {color: style.color}]}>
-              {kind === 'quiz' ? 'Quiz' : 'Assignment'}
+              {kind === 'quiz'
+                ? 'Quiz'
+                : kind === 'coding'
+                ? 'Coding'
+                : 'PETA'}
             </Text>
           </View>
           <Text numberOfLines={1} style={styles.feedTitle}>
@@ -267,19 +228,19 @@ export const MyActivitiesScreen = ({navigation}: Props) => {
                 ? styles.completedStateText
                 : kind === 'quiz'
                 ? styles.quizTodoStateText
-                : styles.assignmentTodoStateText,
+                : kind === 'coding'
+                ? styles.codingTodoStateText
+                : styles.petaTodoStateText,
             ]}>
             {score || (completedActivity ? submissionStatusLabel(submission) : 'To Do')}
           </Text>
         </View>
-        {completedActivity ? (
-          <MaterialCommunityIcons
-            name="chevron-right"
-            size={20}
-            color="#7786A2"
-            style={styles.rowChevron}
-          />
-        ) : null}
+        <MaterialCommunityIcons
+          name="chevron-right"
+          size={20}
+          color="#7786A2"
+          style={styles.rowChevron}
+        />
       </Pressable>
     );
   };
@@ -301,7 +262,7 @@ export const MyActivitiesScreen = ({navigation}: Props) => {
               accessibilityRole="button"
               accessibilityState={{selected}}
               key={tab.key}
-              onPress={() => selectFilter(tab.key)}
+              onPress={() => setFilter(tab.key)}
               style={({pressed}) => [
                 styles.filterTab,
                 selected && styles.filterTabActive,
@@ -324,74 +285,13 @@ export const MyActivitiesScreen = ({navigation}: Props) => {
         })}
       </View>
 
-      <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>
-          Upcoming
-        </Text>
-        {upcoming.length > visibleLimit ? (
-          <Pressable
-            accessibilityLabel={
-              showAllUpcoming ? 'Show fewer upcoming items' : 'View all upcoming items'
-            }
-            accessibilityRole="button"
-            onPress={() => setShowAllUpcoming(current => !current)}
-            style={({pressed}) => [styles.viewAllButton, pressed && styles.pressed]}>
-            <Text style={styles.viewAllText}>
-              {showAllUpcoming ? 'Show less' : 'View all'}
-            </Text>
-            <MaterialCommunityIcons
-              name="chevron-right"
-              size={20}
-              color="#1767F4"
-            />
-          </Pressable>
-        ) : null}
-      </View>
-      {visibleUpcoming.length ? (
-        visibleUpcoming.map(renderFeedItem)
+      {visibleActivities.length ? (
+        visibleActivities.map(renderFeedItem)
       ) : (
         <View style={styles.inlineEmpty}>
-          <Text style={styles.inlineEmptyText}>
-            No upcoming items.
-          </Text>
+          <Text style={styles.inlineEmptyText}>No activities available.</Text>
         </View>
       )}
-
-      <>
-          <View style={[styles.sectionHeader, styles.completedHeader]}>
-            <Text style={styles.sectionTitle}>Completed</Text>
-            {completed.length > visibleLimit ? (
-              <Pressable
-                accessibilityLabel={
-                  showAllCompleted
-                    ? 'Show fewer completed items'
-                    : 'View all completed items'
-                }
-                accessibilityRole="button"
-                onPress={() => setShowAllCompleted(current => !current)}
-                style={({pressed}) => [
-                  styles.viewAllButton,
-                  pressed && styles.pressed,
-                ]}>
-                <Text style={styles.viewAllText}>
-                  {showAllCompleted ? 'Show less' : 'View all'}
-                </Text>
-                <MaterialCommunityIcons
-                  name="chevron-right"
-                  size={20}
-                  color="#1767F4"
-                />
-              </Pressable>
-            ) : null}
-          </View>
-          {visibleCompleted.length ? (
-            visibleCompleted.map(renderFeedItem)
-          ) : (
-            <View style={styles.inlineEmpty}>
-              <Text style={styles.inlineEmptyText}>No completed activities.</Text>
-            </View>
-          )}
-      </>
     </Screen>
   );
 };
@@ -427,16 +327,6 @@ const styles = StyleSheet.create({
   },
   filterLabel: {color: '#697A9A', fontSize: 10, fontWeight: '800', marginTop: 4},
   filterLabelActive: {color: '#1767F4', fontWeight: '900'},
-  sectionHeader: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-  },
-  completedHeader: {marginTop: 29},
-  sectionTitle: {color: '#102653', fontSize: 18, fontWeight: '900'},
-  viewAllButton: {alignItems: 'center', flexDirection: 'row'},
-  viewAllText: {color: '#1767F4', fontSize: 12, fontWeight: '900'},
   feedCard: {
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
@@ -473,8 +363,9 @@ const styles = StyleSheet.create({
   scoreChip: {backgroundColor: '#EAF9F0'},
   stateText: {fontSize: 10, fontWeight: '900'},
   completedStateText: {color: '#159447'},
-  assignmentTodoStateText: {color: '#1767F4'},
+  petaTodoStateText: {color: '#1767F4'},
   quizTodoStateText: {color: '#119C52'},
+  codingTodoStateText: {color: '#7C3AED'},
   rowChevron: {marginLeft: 2},
   inlineEmpty: {alignItems: 'center', backgroundColor: '#FFFFFF', borderRadius: 14, marginBottom: 8, padding: 22},
   inlineEmptyText: {color: '#7181A0', fontSize: 13, fontWeight: '700'},

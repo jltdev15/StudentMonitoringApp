@@ -84,6 +84,24 @@ it('lets the user reveal their password', async () => {
   expect(passwordInput().props.secureTextEntry).toBe(false);
 });
 
+it('shows a friendly message instead of Firebase credential text', async () => {
+  mockedUseAuth.mockReturnValue({
+    authError:
+      '[auth/invalid-credential] The supplied auth credential is incorrect, malformed or has expired.',
+    loading: false,
+    resendVerification,
+    signIn,
+  });
+
+  const tree = await renderScreen();
+  const text = JSON.stringify(tree.toJSON());
+
+  expect(text).toContain(
+    'The email or password you entered is incorrect. Please try again.',
+  );
+  expect(text).not.toContain('auth/invalid-credential');
+});
+
 it('opens student registration', async () => {
   const tree = await renderScreen();
 

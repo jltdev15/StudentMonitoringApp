@@ -16,6 +16,8 @@ import {MyScoresScreen} from '../screens/student/MyScoresScreen';
 import {StudentAnnouncementsScreen} from '../screens/student/StudentAnnouncementsScreen';
 import {StudentAnnouncementDetailsScreen} from '../screens/student/StudentAnnouncementDetailsScreen';
 import {StudentProfileScreen} from '../screens/student/StudentProfileScreen';
+import {EditStudentProfileScreen} from '../screens/student/EditStudentProfileScreen';
+import {StudentActivityDetailsScreen} from '../screens/student/StudentActivityDetailsScreen';
 import {SubmitActivityScreen} from '../screens/student/SubmitActivityScreen';
 
 const Stack = createNativeStackNavigator<StudentStackParamList>();
@@ -42,6 +44,14 @@ const StudentStack = ({initialRouteName}: StudentStackProps) => (
       component={StudentAnnouncementDetailsScreen}
     />
     <Stack.Screen name="StudentProfile" component={StudentProfileScreen} />
+    <Stack.Screen
+      name="EditStudentProfile"
+      component={EditStudentProfileScreen}
+    />
+    <Stack.Screen
+      name="StudentActivityDetails"
+      component={StudentActivityDetailsScreen}
+    />
     <Stack.Screen name="SubmitActivity" component={SubmitActivityScreen} />
   </Stack.Navigator>
 );
@@ -76,7 +86,12 @@ export const StudentTabBar = ({
   const focusedTab = state.routes[state.index];
   const focusedScreen = getFocusedRouteNameFromRoute(focusedTab);
 
-  if (focusedScreen === 'StudentAnnouncementDetails') {
+  if (
+    focusedScreen === 'StudentAnnouncementDetails' ||
+    focusedScreen === 'EditStudentProfile' ||
+    focusedScreen === 'StudentActivityDetails' ||
+    focusedScreen === 'SubmitActivity'
+  ) {
     return null;
   }
 

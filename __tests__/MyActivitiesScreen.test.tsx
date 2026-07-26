@@ -44,6 +44,16 @@ const activities = [
     totalPoints: 20,
   },
   {
+    activityCategory: 'coding' as const,
+    classId: 'class-1',
+    description: 'Build a model of the solar system.',
+    dueDate: new Date('2026-07-28T08:00:00'),
+    id: 'coding-upcoming',
+    status: 'active' as const,
+    title: 'Solar System Model',
+    totalPoints: 30,
+  },
+  {
     classId: 'class-1',
     description: 'Taxonomy and Classification',
     dueDate: new Date('2026-07-27T08:00:00'),
@@ -113,19 +123,26 @@ beforeEach(() => {
   ]);
 });
 
-it('renders the unified upcoming and completed feed', async () => {
+it('renders one teacher-assigned activity feed with row status indicators', async () => {
   const tree = await renderScreen();
   const text = renderedText(tree.toJSON());
 
   expect(text).toContain('Science Worksheet #4');
   expect(text).toContain('Short Quiz #2');
-  expect(text).toContain('Completed');
+  expect(text).toContain('Solar System Model');
+  expect(text).not.toContain('Upcoming');
+  expect(text).not.toContain('Completed');
+  expect(text).toContain('To Do');
   expect(text).toContain('18/20');
   expect(text).toContain('Excellent work');
 });
 
-it('filters assignments and quizzes', async () => {
+it('filters PETAs and quizzes', async () => {
   const tree = await renderScreen();
+
+  expect(
+    tree.root.findAllByProps({name: 'file-question-outline'}).length,
+  ).toBeGreaterThan(0);
 
   await act(async () => {
     tree.root.findByProps({accessibilityLabel: 'Quizzes'}).props.onPress();
@@ -135,14 +152,28 @@ it('filters assignments and quizzes', async () => {
 
   await act(async () => {
     tree.root
-      .findByProps({accessibilityLabel: 'Assignments'})
+      .findByProps({accessibilityLabel: 'PETA'})
       .props.onPress();
   });
   expect(renderedText(tree.toJSON())).toContain('Science Worksheet #4');
   expect(renderedText(tree.toJSON())).not.toContain('Short Quiz #2');
 });
 
-it('keeps submit images navigation working', async () => {
+it('filters coding activities using their teacher-selected category', async () => {
+  const tree = await renderScreen();
+
+  await act(async () => {
+    tree.root.findByProps({accessibilityLabel: 'Coding'}).props.onPress();
+  });
+
+  const text = renderedText(tree.toJSON());
+  expect(text).toContain('Solar System Model');
+  expect(text).toContain('Coding');
+  expect(text).not.toContain('Short Quiz #2');
+  expect(text).not.toContain('Science Worksheet #4');
+});
+
+it('opens activity details for every teacher-created activity', async () => {
   const tree = await renderScreen();
 
   await act(async () => {
@@ -151,7 +182,7 @@ it('keeps submit images navigation working', async () => {
       .props.onPress();
   });
 
-  expect(navigation.navigate).toHaveBeenCalledWith('SubmitActivity', {
+  expect(navigation.navigate).toHaveBeenCalledWith('StudentActivityDetails', {
     activity: activities[0],
   });
 });
@@ -166,5 +197,5 @@ it('shows an empty quiz state when no quiz activities are available', async () =
       .props.onPress();
   });
 
-  expect(renderedText(tree.toJSON())).toContain('No upcoming items.');
+  expect(renderedText(tree.toJSON())).toContain('No activities available.');
 });

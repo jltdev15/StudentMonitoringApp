@@ -9,7 +9,7 @@ import {
   View,
 } from 'react-native';
 import {NativeStackScreenProps} from '@react-navigation/native-stack';
-import {HelperText, Text} from 'react-native-paper';
+import {Text} from 'react-native-paper';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import {Screen} from '../../components/Screen';
 import {useAuth} from '../../context/AuthContext';
@@ -18,6 +18,35 @@ import {isEmail} from '../../utils/validationUtils';
 
 const classTrackLogo = require('../../assets/images/class-track-logo.png');
 const loginBackground = require('../../assets/images/login-bg.webp');
+
+const friendlyAuthError = (authError?: string | null) => {
+  if (!authError) {
+    return '';
+  }
+
+  const message = authError.toLowerCase();
+  if (
+    message.includes('auth/invalid-credential') ||
+    message.includes('auth/wrong-password') ||
+    message.includes('auth/user-not-found') ||
+    message.includes('auth/invalid-email')
+  ) {
+    return 'The email or password you entered is incorrect. Please try again.';
+  }
+  if (message.includes('auth/user-disabled')) {
+    return 'This account has been disabled. Please contact your school.';
+  }
+  if (message.includes('auth/too-many-requests')) {
+    return 'Too many sign-in attempts. Please wait a moment and try again.';
+  }
+  if (message.includes('network-request-failed')) {
+    return 'Check your internet connection and try again.';
+  }
+  if (message.includes('verify your email')) {
+    return authError;
+  }
+  return 'We could not sign you in. Please try again.';
+};
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'Login'>;
 
@@ -87,14 +116,16 @@ export const LoginScreen = ({navigation}: Props) => {
   const [verificationRequired, setVerificationRequired] = useState(false);
   const isShortScreen = height < 740;
   const isNarrowScreen = width < 380;
-  const contentMinHeight = Math.max(height - 32, 0);
+  const contentMinHeight = height;
   const sheetTopMargin = Math.max(48, Math.round(height * 0.59) - 310);
   const hasVerificationAuthError = Boolean(
     authError?.includes('verify your email'),
   );
   const showVerificationSection =
     (verificationRequired || hasVerificationAuthError) && !verificationDismissed;
-  const formError = hasVerificationAuthError ? error : error || authError || '';
+  const formError = hasVerificationAuthError
+    ? error
+    : error || friendlyAuthError(authError);
 
   useEffect(() => {
     if (hasVerificationAuthError) {
@@ -233,8 +264,8 @@ export const LoginScreen = ({navigation}: Props) => {
       <View
         style={[
           styles.sheet,
+          styles.sheetAnchored,
           isShortScreen && styles.sheetShort,
-          {marginTop: sheetTopMargin},
         ]}>
         <View style={styles.welcomeRow}>
           <View style={styles.welcomeIcon}>
@@ -274,9 +305,14 @@ export const LoginScreen = ({navigation}: Props) => {
           </View>
 
           {formError ? (
-            <HelperText type="error" style={styles.helperText}>
-              {formError}
-            </HelperText>
+            <View accessibilityLabel="Login error" style={styles.errorBanner}>
+              <MaterialCommunityIcons
+                color="#D53D49"
+                name="alert-circle-outline"
+                size={18}
+              />
+              <Text style={styles.errorText}>{formError}</Text>
+            </View>
           ) : null}
 
           <Pressable accessibilityRole="button" style={styles.forgotButton}>
@@ -405,6 +441,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.17,
     shadowRadius: 18,
   },
+  sheetAnchored: {marginTop: 'auto'},
   sheetShort: {padding: 20},
   welcomeRow: {alignItems: 'center', flexDirection: 'row'},
   welcomeIcon: {
@@ -434,7 +471,8 @@ const styles = StyleSheet.create({
   fieldLabel: {color: '#637391', fontSize: 14, fontWeight: '700'},
   input: {color: '#152C5A', fontSize: 17, minHeight: 31, padding: 0},
   eyeButton: {alignItems: 'center', height: 42, justifyContent: 'center', width: 42},
-  helperText: {marginTop: 2, paddingHorizontal: 0},
+  errorBanner: {alignItems: 'flex-start', backgroundColor: '#FFF0F1', borderColor: '#FFD8DC', borderRadius: 10, borderWidth: 1, flexDirection: 'row', marginTop: 12, padding: 10},
+  errorText: {color: '#B4232E', flex: 1, fontSize: 12, fontWeight: '700', lineHeight: 17, marginLeft: 7},
   forgotButton: {alignSelf: 'flex-end', marginBottom: 18, marginTop: 12},
   forgotText: {color: '#075FE4', fontSize: 15, fontWeight: '800'},
   loginButton: {

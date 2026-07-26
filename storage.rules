@@ -39,6 +39,27 @@ service firebase.storage {
         && classRecord(activity(activityId).classId).teacherId == request.auth.uid;
     }
 
+    function isProfileOwner(studentId) {
+      return signedIn()
+        && userProfile().role == 'student'
+        && userProfile().status == 'active'
+        && userProfile().studentId == studentId;
+    }
+
+    function isActiveTeacher() {
+      return signedIn()
+        && userProfile().role == 'teacher'
+        && userProfile().status == 'active';
+    }
+
+    match /student-profile-images/{studentId}/avatar {
+      allow read: if isProfileOwner(studentId) || isActiveTeacher();
+      allow create, update: if isProfileOwner(studentId)
+        && request.resource.size <= 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+      allow delete: if isProfileOwner(studentId);
+    }
+
     match /activity-submissions/{activityId}/{studentId}/{fileName} {
       allow read: if isEnrolledStudent(activityId, studentId)
         || isActivityTeacher(activityId);

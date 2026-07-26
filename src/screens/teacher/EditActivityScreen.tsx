@@ -12,11 +12,21 @@ import {AppHeader} from '../../components/AppHeader';
 import {AppTextInput} from '../../components/AppTextInput';
 import {Screen} from '../../components/Screen';
 import {updateActivity} from '../../services/activityService';
-import {ActivityRecord} from '../../types/models';
+import {ActivityCategory, ActivityRecord} from '../../types/models';
 import {TeacherStackParamList} from '../../types/navigation';
 import {required, toNumberOrZero} from '../../utils/validationUtils';
 
 type Props = NativeStackScreenProps<TeacherStackParamList, 'EditActivity'>;
+
+const activityCategories: {
+  icon: string;
+  label: string;
+  value: ActivityCategory;
+}[] = [
+  {icon: 'clipboard-text-outline', label: 'PETA', value: 'peta'},
+  {icon: 'file-question-outline', label: 'Quiz', value: 'quiz'},
+  {icon: 'code-tags', label: 'Coding', value: 'coding'},
+];
 
 const toPickerDate = (dueDate: ActivityRecord['dueDate']) => {
   if (!dueDate) {
@@ -33,6 +43,10 @@ export const EditActivityScreen = ({route, navigation}: Props) => {
   const [totalPoints, setTotalPoints] = useState(String(activity.totalPoints));
   const [acceptsImageAttachments, setAcceptsImageAttachments] = useState(
     activity.acceptsImageAttachments === true,
+  );
+  const [activityCategory, setActivityCategory] = useState<ActivityCategory>(
+    activity.activityCategory ||
+      (/quiz/i.test(`${activity.title} ${activity.description}`) ? 'quiz' : 'peta'),
   );
   const [datePickerVisible, setDatePickerVisible] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -65,6 +79,7 @@ export const EditActivityScreen = ({route, navigation}: Props) => {
       description,
       dueDate: Timestamp.fromDate(dueDate),
       totalPoints: toNumberOrZero(totalPoints),
+      activityCategory,
       acceptsImageAttachments,
     };
     setError('');
@@ -75,6 +90,7 @@ export const EditActivityScreen = ({route, navigation}: Props) => {
         description: updatedActivity.description,
         dueDate: updatedActivity.dueDate,
         totalPoints: updatedActivity.totalPoints,
+        activityCategory: updatedActivity.activityCategory,
         acceptsImageAttachments: updatedActivity.acceptsImageAttachments,
       });
       Alert.alert('Activity updated', 'Your changes have been saved.', [
@@ -107,6 +123,41 @@ export const EditActivityScreen = ({route, navigation}: Props) => {
         value={title}
         onChangeText={setTitle}
       />
+      <View style={styles.categoryField}>
+        <Text style={styles.categoryLabel}>Activity category</Text>
+        <View style={styles.categoryOptions}>
+          {activityCategories.map(category => {
+            const selected = activityCategory === category.value;
+            return (
+              <Pressable
+                accessibilityLabel={`Select ${category.label} category`}
+                accessibilityRole="radio"
+                accessibilityState={{selected}}
+                key={category.value}
+                onPress={() => setActivityCategory(category.value)}
+                style={({pressed}) => [
+                  styles.categoryOption,
+                  selected && styles.categoryOptionSelected,
+                  pressed && styles.pressed,
+                ]}>
+                <MaterialCommunityIcons
+                  color={selected ? '#2563EB' : '#64748B'}
+                  name={category.icon}
+                  size={20}
+                />
+                <Text
+                  numberOfLines={1}
+                  style={[
+                    styles.categoryOptionText,
+                    selected && styles.categoryOptionTextSelected,
+                  ]}>
+                  {category.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </View>
       <View style={styles.attachmentOption}>
         <View style={styles.attachmentIcon}>
           <MaterialCommunityIcons name="image-plus" size={23} color="#2563EB" />
@@ -216,6 +267,13 @@ const styles = StyleSheet.create({
     marginTop: 3,
   },
   attachmentTitle: {color: '#081638', fontSize: 15, fontWeight: '900'},
+  categoryField: {marginBottom: 18},
+  categoryLabel: {color: '#081638', fontSize: 14, fontWeight: '800', marginBottom: 8},
+  categoryOption: {alignItems: 'center', backgroundColor: '#FFFFFF', borderColor: '#DDE8F8', borderRadius: 12, borderWidth: 1, flex: 1, justifyContent: 'center', minHeight: 68, minWidth: 0, paddingHorizontal: 5},
+  categoryOptionSelected: {backgroundColor: '#EEF4FF', borderColor: '#2563EB'},
+  categoryOptionText: {color: '#64748B', fontSize: 10, fontWeight: '800', marginTop: 5},
+  categoryOptionTextSelected: {color: '#2563EB', fontWeight: '900'},
+  categoryOptions: {flexDirection: 'row', gap: 8},
   dateCopy: {
     flex: 1,
     minWidth: 0,

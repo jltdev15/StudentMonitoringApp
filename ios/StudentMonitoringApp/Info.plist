@@ -34,9 +34,9 @@
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string></string>
 	<key>NSCameraUsageDescription</key>
-	<string>Take photos of completed activity work to submit to your teacher.</string>
+	<string>Take a profile photo or photos of completed activity work to share in ClassTrack.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Select photos of completed activity work to submit to your teacher.</string>
+	<string>Select a profile photo or photos of completed activity work from your library.</string>
 	<key>RCTNewArchEnabled</key>
 	<true/>
 	<key>UIAppFonts</key>

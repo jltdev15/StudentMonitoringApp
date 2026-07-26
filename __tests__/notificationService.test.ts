@@ -1,5 +1,6 @@
 import {
   onMessage,
+  requestPermission,
   subscribeToTopic,
   unsubscribeFromTopic,
 } from '@react-native-firebase/messaging';
@@ -53,6 +54,14 @@ it('creates the Android announcement channel during notification initialization'
     importance: 4,
     name: 'Announcements',
   });
+});
+
+it('does not prompt for permission during post-login notification setup', async () => {
+  Object.defineProperty(Platform, 'OS', {configurable: true, value: 'ios'});
+
+  await initializeAnnouncementNotifications();
+
+  expect(requestPermission).not.toHaveBeenCalled();
 });
 
 it('uses the Class Tracker icons for foreground announcements', async () => {

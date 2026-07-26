@@ -15,11 +15,21 @@ import {Screen} from '../../components/Screen';
 import {useAuth} from '../../context/AuthContext';
 import {createActivity} from '../../services/activityService';
 import {getTeacherClasses} from '../../services/classService';
-import {ClassRecord} from '../../types/models';
+import {ActivityCategory, ClassRecord} from '../../types/models';
 import {TeacherStackParamList} from '../../types/navigation';
 import {required, toNumberOrZero} from '../../utils/validationUtils';
 
 type Props = NativeStackScreenProps<TeacherStackParamList, 'CreateActivity'>;
+
+const activityCategories: {
+  icon: string;
+  label: string;
+  value: ActivityCategory;
+}[] = [
+  {icon: 'clipboard-text-outline', label: 'PETA', value: 'peta'},
+  {icon: 'file-question-outline', label: 'Quiz', value: 'quiz'},
+  {icon: 'code-tags', label: 'Coding', value: 'coding'},
+];
 
 export const CreateActivityScreen = ({route, navigation}: Props) => {
   const {profile} = useAuth();
@@ -27,6 +37,8 @@ export const CreateActivityScreen = ({route, navigation}: Props) => {
   const [classId, setClassId] = useState(route.params?.classId || '');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [activityCategory, setActivityCategory] =
+    useState<ActivityCategory>('peta');
   const [dueDate, setDueDate] = useState(new Date());
   const [totalPoints, setTotalPoints] = useState('100');
   const [acceptsImageAttachments, setAcceptsImageAttachments] = useState(false);
@@ -78,6 +90,7 @@ export const CreateActivityScreen = ({route, navigation}: Props) => {
         dueDate: Timestamp.fromDate(dueDate),
         totalPoints: toNumberOrZero(totalPoints),
         createdBy: profile.uid,
+        activityCategory,
         acceptsImageAttachments,
       });
       Alert.alert(
@@ -180,6 +193,41 @@ export const CreateActivityScreen = ({route, navigation}: Props) => {
         value={title}
         onChangeText={setTitle}
       />
+      <View style={styles.categoryField}>
+        <Text style={styles.categoryLabel}>Activity category</Text>
+        <View style={styles.categoryOptions}>
+          {activityCategories.map(category => {
+            const selected = activityCategory === category.value;
+            return (
+              <Pressable
+                accessibilityLabel={`Select ${category.label} category`}
+                accessibilityRole="radio"
+                accessibilityState={{selected}}
+                key={category.value}
+                onPress={() => setActivityCategory(category.value)}
+                style={({pressed}) => [
+                  styles.categoryOption,
+                  selected && styles.categoryOptionSelected,
+                  pressed && styles.pressed,
+                ]}>
+                <MaterialCommunityIcons
+                  color={selected ? '#2563EB' : '#64748B'}
+                  name={category.icon}
+                  size={20}
+                />
+                <Text
+                  numberOfLines={1}
+                  style={[
+                    styles.categoryOptionText,
+                    selected && styles.categoryOptionTextSelected,
+                  ]}>
+                  {category.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </View>
       <View style={styles.attachmentOption}>
         <View style={styles.attachmentIcon}>
           <MaterialCommunityIcons name="image-plus" size={23} color="#2563EB" />
@@ -296,6 +344,13 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '900',
   },
+  categoryField: {marginBottom: 18},
+  categoryLabel: {color: '#081638', fontSize: 14, fontWeight: '800', marginBottom: 8},
+  categoryOption: {alignItems: 'center', backgroundColor: '#FFFFFF', borderColor: '#DDE8F8', borderRadius: 12, borderWidth: 1, flex: 1, justifyContent: 'center', minHeight: 68, minWidth: 0, paddingHorizontal: 5},
+  categoryOptionSelected: {backgroundColor: '#EEF4FF', borderColor: '#2563EB'},
+  categoryOptionText: {color: '#64748B', fontSize: 10, fontWeight: '800', marginTop: 5},
+  categoryOptionTextSelected: {color: '#2563EB', fontWeight: '900'},
+  categoryOptions: {flexDirection: 'row', gap: 8},
   dateCopy: {
     flex: 1,
     minWidth: 0,

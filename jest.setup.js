@@ -97,4 +97,12 @@ jest.mock('react-native-fs', () => ({
   readFile: jest.fn(),
 }));
 
+jest.mock('@react-native-async-storage/async-storage', () => ({
+  __esModule: true,
+  default: {
+    getItem: jest.fn(() => Promise.resolve(null)),
+    setItem: jest.fn(() => Promise.resolve()),
+  },
+}));
+
 jest.mock('react-native-vector-icons/MaterialCommunityIcons', () => 'Icon');

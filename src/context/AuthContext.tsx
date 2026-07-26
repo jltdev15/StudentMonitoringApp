@@ -178,7 +178,7 @@ export const AuthProvider = ({children}: PropsWithChildren) => {
           }
         } catch (profileErr) {
           console.warn('Initial profile load failed, retrying...', profileErr);
-          await new Promise(resolve => setTimeout(resolve, 500));
+          await new Promise<void>(resolve => setTimeout(() => resolve(), 500));
           await loadProfile(credential.user);
           userProfile = await getUserProfile(credential.user.uid);
         }

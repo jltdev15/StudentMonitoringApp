@@ -49,6 +49,17 @@ service cloud.firestore {
         && request.resource.data.userId == request.auth.uid;
     }
 
+    function isStudentProfileUpdate(studentId) {
+      return isOwnStudentRecord(studentId)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'contactNumber',
+          'dateOfBirth',
+          'gender',
+          'photoUrl',
+          'updatedAt'
+        ]);
+    }
+
     function isValidClaimedStudentProfile(userId) {
       return signedIn()
         && userId == request.auth.uid
@@ -124,7 +135,9 @@ service cloud.firestore {
     match /students/{studentId} {
       allow read: if isTeacher() || isOwnStudentRecord(studentId) || isClaimableStudentRecord();
       allow create: if isTeacher();
-      allow update: if isTeacher() || isStudentClaimUpdate(studentId);
+      allow update: if isTeacher()
+        || isStudentClaimUpdate(studentId)
+        || isStudentProfileUpdate(studentId);
       allow delete: if false;
     }
 
