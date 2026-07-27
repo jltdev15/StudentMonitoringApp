@@ -83,6 +83,7 @@ export type ActivityRecord = {
   createdBy: string;
   activityCategory?: ActivityCategory;
   acceptsImageAttachments?: boolean;
+  quizData?: any;
   status: ActivityStatus;
   createdAt?: Timestamp;
   updatedAt?: Timestamp;

@@ -133,6 +133,20 @@ export const saveScores = async (activity: ActivityRecord, teacherId: string, it
   await batch.commit();
 };
 
+export const submitStudentQuiz = async (activityId: string, classId: string, studentId: string, score: number, answers?: Record<string, any>) => {
+  await setDoc(doc(db, 'activitySubmissions', `${activityId}_${studentId}`), {
+    activityId,
+    classId,
+    studentId,
+    status: 'submitted',
+    score,
+    ...(answers ? { answers } : {}),
+    remarks: 'Auto-graded Quiz',
+    updatedAt: serverTimestamp(),
+    createdAt: serverTimestamp(),
+  }, {merge: true});
+};
+
 export const getAnnouncements = async (teacherId: string) => {
   const result = await getDocs(query(collection(db, 'announcements'), where('postedBy', '==', teacherId)));
   return result.docs.map(item => record<AnnouncementRecord>(item)).sort((a, b) => createdAt(b) - createdAt(a));
@@ -249,3 +263,47 @@ export const getStudentAnnouncements = async (classIds: string[]) => {
   return result.filter(a => a.targetRole === 'all' || a.targetRole === 'students')
     .sort((a, b) => createdAt(b) - createdAt(a));
 };
+
+export const findRosterStudent = async (studentNumber: string) => {
+  const normalized = studentNumber.trim().toUpperCase();
+  const snapshot = await getDocs(
+    query(
+      collection(db, 'students'),
+      where('studentNumber', '==', normalized),
+      where('status', '==', 'active'),
+      where('userId', '==', null),
+      limit(1),
+    ),
+  );
+  return snapshot.empty ? null : record<StudentRecord>(snapshot.docs[0]);
+};
+
+export const claimRosterStudent = async (studentId: string, userId: string, email: string) => {
+  await updateDoc(doc(db, 'students', studentId), {
+    userId,
+    email: email.trim().toLowerCase(),
+    updatedAt: serverTimestamp(),
+  });
+};
+
+export const createStudentUserProfile = async (
+  uid: string,
+  payload: {
+    fullName: string;
+    email: string;
+    role: 'student';
+    studentId: string;
+    studentNumber: string;
+    teacherId: string | null;
+    classIds: string[];
+    status: 'active';
+  },
+) => {
+  await setDoc(doc(db, 'users', uid), {
+    ...payload,
+    uid,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+};
+

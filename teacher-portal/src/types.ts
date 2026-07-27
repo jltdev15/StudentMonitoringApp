@@ -54,6 +54,7 @@ export type ActivityRecord = {
   totalPoints: number;
   createdBy: string;
   activityCategory?: ActivityCategory;
+  quizData?: any;
   status: 'active' | 'closed';
 };
 
@@ -64,6 +65,7 @@ export type SubmissionRecord = {
   studentId: string;
   status: SubmissionStatus;
   score: number | null;
+  answers?: Record<string, any>;
   remarks: string;
 };
 
