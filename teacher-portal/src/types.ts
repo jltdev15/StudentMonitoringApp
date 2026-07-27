@@ -4,7 +4,7 @@ export type AttendanceStatus = 'present' | 'absent' | 'late' | 'excused';
 export type SubmissionStatus = 'submitted' | 'missing' | 'late' | 'excused';
 export type ActivityCategory = 'peta' | 'quiz' | 'coding';
 
-export type TeacherProfile = {
+export type UserProfile = {
   uid: string;
   fullName: string;
   email: string;

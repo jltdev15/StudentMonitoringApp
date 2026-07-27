@@ -113,13 +113,7 @@ service cloud.firestore {
     }
 
     match /classes/{classId} {
-      allow read: if (
-          isTeacher()
-          && resource.data.teacherId == request.auth.uid
-        )
-        || (isStudent() && classId in currentUser().classIds)
-        // Allow reading classes during teacher migration (teacherId is still the old UID)
-        || (isTeacher() && exists(/databases/$(database)/documents/users/$(request.auth.uid)));
+      allow read: if signedIn();
       allow create: if requestClassOwnedByTeacher();
       allow update: if isTeacher()
         && (
@@ -133,7 +127,9 @@ service cloud.firestore {
     }
 
     match /students/{studentId} {
-      allow read: if isTeacher() || isOwnStudentRecord(studentId) || isClaimableStudentRecord();
+      allow read: if isTeacher() 
+        || (signedIn() && resource.data.userId == request.auth.uid)
+        || isClaimableStudentRecord();
       allow create: if isTeacher();
       allow update: if isTeacher()
         || isStudentClaimUpdate(studentId)
@@ -142,19 +138,21 @@ service cloud.firestore {
     }
 
     match /attendance/{attendanceId} {
-      allow read: if isTeacher() || isOwnStudentRecord(resource.data.studentId);
+      allow read: if isTeacher() 
+        || (signedIn() && resource.data.studentId == currentUser().studentId);
       allow create, update: if ownsClass(request.resource.data.classId);
       allow delete: if ownsClass(resource.data.classId);
     }
 
     match /activities/{activityId} {
-      allow read: if isTeacher() || (isStudent() && resource.data.classId in currentUser().classIds);
+      allow read: if signedIn();
       allow create, update: if ownsClass(request.resource.data.classId);
       allow delete: if ownsClass(resource.data.classId);
     }
 
     match /activitySubmissions/{submissionId} {
-      allow read: if isTeacher() || isOwnStudentRecord(resource.data.studentId);
+      allow read: if isTeacher() 
+        || (signedIn() && resource.data.studentId == currentUser().studentId);
       allow create: if ownsClass(request.resource.data.classId)
         || (
           isStudentImageSubmission()
@@ -173,12 +171,7 @@ service cloud.firestore {
     }
 
     match /announcements/{announcementId} {
-      allow read: if isTeacher()
-        || (
-          isStudent()
-          && resource.data.targetRole in ['all', 'students']
-          && (resource.data.classId == null || resource.data.classId in currentUser().classIds)
-        );
+      allow read: if signedIn();
       allow create: if isTeacher()
         && request.resource.data.postedBy == request.auth.uid
         && (

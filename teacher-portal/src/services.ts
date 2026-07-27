@@ -24,15 +24,15 @@ import type {
   StudentRecord,
   SubmissionRecord,
   SubmissionStatus,
-  TeacherProfile,
+  UserProfile,
 } from './types';
 
 const record = <T>(snapshot: QueryDocumentSnapshot<DocumentData>) =>
   ({id: snapshot.id, ...snapshot.data()}) as T;
 
-export const getTeacherProfile = async (uid: string) => {
+export const getUserProfile = async (uid: string) => {
   const snapshot = await getDoc(doc(db, 'users', uid));
-  return snapshot.exists() ? ({uid, ...snapshot.data()} as TeacherProfile) : null;
+  return snapshot.exists() ? ({uid, ...snapshot.data()} as UserProfile) : null;
 };
 
 export const getTeacherClasses = async (teacherId: string) => {
@@ -193,4 +193,59 @@ export const resetTeacherData = async (teacherId: string): Promise<ResetTotals> 
     totals.activities += await deleteQuery(query(collection(db, 'activities'), where('classId', 'in', classIdChunk)));
   }
   return totals;
+};
+
+// Student Functions
+export const getStudentRecordByUserId = async (userId: string) => {
+  const result = await getDocs(query(collection(db, 'students'), where('userId', '==', userId), where('status', '==', 'active'), limit(1)));
+  return result.empty ? null : record<StudentRecord>(result.docs[0]);
+};
+
+export const getClassesByIds = async (classIds: string[]) => {
+  if (!classIds.length) return [];
+  const result: ClassRecord[] = [];
+  for (const chunk of chunks(classIds, 30)) {
+    const snapshot = await getDocs(query(collection(db, 'classes'), where('__name__', 'in', chunk)));
+    result.push(...snapshot.docs.map(item => record<ClassRecord>(item)));
+  }
+  return result.sort((a, b) => a.className.localeCompare(b.className));
+};
+
+export const getStudentAttendanceRecords = async (studentId: string) => {
+  const result = await getDocs(query(collection(db, 'attendance'), where('studentId', '==', studentId)));
+  return result.docs.map(item => record<AttendanceRecord>(item));
+};
+
+export const getStudentSubmissions = async (studentId: string) => {
+  const result = await getDocs(query(collection(db, 'activitySubmissions'), where('studentId', '==', studentId)));
+  return result.docs.map(item => record<SubmissionRecord>(item));
+};
+
+export const getStudentActivities = async (classIds: string[]) => {
+  if (!classIds.length) return [];
+  const result: ActivityRecord[] = [];
+  for (const chunk of chunks(classIds, 30)) {
+    const snapshot = await getDocs(query(collection(db, 'activities'), where('classId', 'in', chunk)));
+    result.push(...snapshot.docs.map(item => record<ActivityRecord>(item)));
+  }
+  return result.sort((a, b) => {
+    const aTime = a.dueDate ? (a.dueDate instanceof Date ? a.dueDate.getTime() : a.dueDate.toMillis()) : 0;
+    const bTime = b.dueDate ? (b.dueDate instanceof Date ? b.dueDate.getTime() : b.dueDate.toMillis()) : 0;
+    return aTime - bTime;
+  });
+};
+
+export const getStudentAnnouncements = async (classIds: string[]) => {
+  const result: AnnouncementRecord[] = [];
+  if (classIds.length > 0) {
+    for (const chunk of chunks(classIds, 30)) {
+      const snapshot = await getDocs(query(collection(db, 'announcements'), where('classId', 'in', chunk)));
+      result.push(...snapshot.docs.map(item => record<AnnouncementRecord>(item)));
+    }
+  }
+  const globalSnapshot = await getDocs(query(collection(db, 'announcements'), where('classId', '==', null)));
+  result.push(...globalSnapshot.docs.map(item => record<AnnouncementRecord>(item)));
+  
+  return result.filter(a => a.targetRole === 'all' || a.targetRole === 'students')
+    .sort((a, b) => createdAt(b) - createdAt(a));
 };
