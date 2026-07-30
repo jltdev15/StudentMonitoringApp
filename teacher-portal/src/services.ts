@@ -14,8 +14,10 @@ import {
   type DocumentData,
   type QueryDocumentSnapshot,
 } from 'firebase/firestore';
-import {db} from './firebase';
+import {getDownloadURL, ref as storageRef, uploadBytes} from 'firebase/storage';
+import {db, storage} from './firebase';
 import type {
+  ActivityMaterial,
   ActivityRecord,
   AnnouncementRecord,
   AttendanceRecord,
@@ -110,6 +112,27 @@ export const saveActivity = async (teacherId: string, payload: Omit<ActivityReco
   const ref = await addDoc(collection(db, 'activities'), {...data, createdAt: serverTimestamp()});
   return ref.id;
 };
+
+const safeStorageFileName = (fileName: string) =>
+  fileName.normalize('NFKD').replace(/[^\w.-]+/g, '-').replace(/^-+|-+$/g, '') || 'material';
+
+export const uploadActivityMaterials = async (activityId: string, files: File[]): Promise<ActivityMaterial[]> =>
+  Promise.all(files.map(async (file, index) => {
+    const id = crypto.randomUUID();
+    const path = `activity-materials/${activityId}/${id}-${safeStorageFileName(file.name)}`;
+    const target = storageRef(storage, path);
+    const contentType = file.type || (/\.html?$/i.test(file.name) ? 'text/html' : 'application/octet-stream');
+    await uploadBytes(target, file, {contentType});
+    return {
+      id,
+      storagePath: path,
+      downloadUrl: await getDownloadURL(target),
+      fileName: file.name,
+      contentType,
+      size: file.size,
+      order: index,
+    };
+  }));
 
 export const closeActivity = (id: string) => updateDoc(doc(db, 'activities', id), {status: 'closed', updatedAt: serverTimestamp()});
 
@@ -306,4 +329,3 @@ export const createStudentUserProfile = async (
     updatedAt: serverTimestamp(),
   });
 };
-

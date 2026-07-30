@@ -14,8 +14,18 @@ service firebase.storage {
       return firestore.get(/databases/(default)/documents/activities/$(activityId)).data;
     }
 
-    function classRecord(classId) {
-      return firestore.get(/databases/(default)/documents/classes/$(classId)).data;
+    function studentRecord(studentId) {
+      return firestore.get(/databases/(default)/documents/students/$(studentId)).data;
+    }
+
+    function isStudentInActivityClass(activityId) {
+      return signedIn()
+        && userProfile().role == 'student'
+        && userProfile().status == 'active'
+        && userProfile().studentId != null
+        && studentRecord(userProfile().studentId).status == 'active'
+        && studentRecord(userProfile().studentId).userId == request.auth.uid
+        && activity(activityId).classId in studentRecord(userProfile().studentId).classIds;
     }
 
     function isEnrolledStudent(activityId, studentId) {
@@ -34,9 +44,7 @@ service firebase.storage {
 
     function isActivityTeacher(activityId) {
       return signedIn()
-        && userProfile().role == 'teacher'
-        && userProfile().status == 'active'
-        && classRecord(activity(activityId).classId).teacherId == request.auth.uid;
+        && activity(activityId).createdBy == request.auth.uid;
     }
 
     function isProfileOwner(studentId) {
@@ -68,6 +76,16 @@ service firebase.storage {
         && request.resource.contentType.matches('image/.*');
       allow delete: if isEnrolledStudent(activityId, studentId)
         || isActivityTeacher(activityId);
+    }
+
+    match /activity-materials/{activityId}/{fileName} {
+      allow read: if isActivityTeacher(activityId)
+        || isStudentInActivityClass(activityId);
+      allow create, update: if isActivityTeacher(activityId)
+        && request.resource.size <= 10 * 1024 * 1024
+        && (request.resource.contentType.matches('image/.*')
+          || request.resource.contentType == 'text/html');
+      allow delete: if isActivityTeacher(activityId);
     }
   }
 }

@@ -40,11 +40,12 @@ service cloud.firestore {
 
     function isClaimableStudentRecord() {
       return resource.data.status == 'active'
-        && resource.data.userId == null;
+        && (resource.data.userId == null || resource.data.userId == '');
     }
 
     function isStudentClaimUpdate(studentId) {
       return isStudent()
+        && (resource.data.userId == null || resource.data.userId == '')
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['userId', 'email', 'updatedAt'])
         && request.resource.data.userId == request.auth.uid;
     }

@@ -43,6 +43,7 @@ export const createStudent = async (payload: StudentInput) => {
   const ref = docRef(collections.students);
   await setDoc(ref, {
     ...payload,
+    userId: payload.userId || null,
     studentNumber: normalizeStudentNumber(payload.studentNumber),
     fullName: payload.fullName.trim(),
     email: normalizeEmail(payload.email),
@@ -151,16 +152,26 @@ export const getStudentById = async (studentId: string) => {
 };
 
 export const findRosterStudent = async (studentNumber: string) => {
-  const snapshot = await getDocs(
-    query(
-      col(collections.students),
-      where('studentNumber', '==', normalizeStudentNumber(studentNumber)),
-      where('status', '==', 'active'),
-      where('userId', '==', null),
-      limit(1),
+  const unclaimedValues: Array<string | null> = [null, ''];
+  const snapshots = await Promise.all(
+    unclaimedValues.map(userId =>
+      getDocs(
+        query(
+          col(collections.students),
+          where(
+            'studentNumber',
+            '==',
+            normalizeStudentNumber(studentNumber),
+          ),
+          where('status', '==', 'active'),
+          where('userId', '==', userId),
+          limit(1),
+        ),
+      ),
     ),
   );
-  return snapshot.empty ? null : mapDoc<StudentRecord>(snapshot.docs[0]);
+  const match = snapshots.find(snapshot => !snapshot.empty)?.docs[0];
+  return match ? mapDoc<StudentRecord>(match) : null;
 };
 
 const getExistingRosterStudent = async (studentNumber: string) => {

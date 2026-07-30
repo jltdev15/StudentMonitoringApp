@@ -45,6 +45,16 @@ export type AttendanceRecord = {
   remarks: string;
 };
 
+export type ActivityMaterial = {
+  id: string;
+  storagePath: string;
+  downloadUrl: string;
+  fileName: string;
+  contentType: string;
+  size: number;
+  order: number;
+};
+
 export type ActivityRecord = {
   id: string;
   classId: string;
@@ -55,6 +65,10 @@ export type ActivityRecord = {
   createdBy: string;
   activityCategory?: ActivityCategory;
   quizData?: any;
+  materials?: ActivityMaterial[];
+  petaOutputs?: ActivityMaterial[];
+  /** Legacy single-output field retained for existing activity records. */
+  petaOutput?: ActivityMaterial | null;
   status: 'active' | 'closed';
 };
 
