@@ -53,6 +53,24 @@ export const saveAttendanceBatch = async (
       {merge: true},
     );
   });
+  const statusCounts = drafts.reduce<Record<string, number>>((counts, draft) => {
+    if (draft.status) counts[draft.status] = (counts[draft.status] || 0) + 1;
+    return counts;
+  }, {});
+  batch.set(
+    docRef(collections.attendanceSessions, `${classId}_${date}`),
+    {
+      classId,
+      date,
+      recordedBy,
+      presentCount: statusCounts.present || 0,
+      totalCount: drafts.length,
+      statusCounts,
+      createdAt: now(),
+      updatedAt: now(),
+    },
+    {merge: true},
+  );
   await batch.commit();
 };
 

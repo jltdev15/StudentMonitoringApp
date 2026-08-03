@@ -1,11 +1,11 @@
 // @refresh reset
-import React, {useState} from 'react';
+import React, {useEffect, useState} from 'react';
 import {Platform, Pressable, StyleSheet, View} from 'react-native';
 import {NativeStackScreenProps} from '@react-navigation/native-stack';
 import DateTimePicker, {
   DateTimePickerAndroid,
 } from '@react-native-community/datetimepicker';
-import {HelperText, Portal, Snackbar, Text} from 'react-native-paper';
+import {HelperText, Portal, Text} from 'react-native-paper';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import {AppButton} from '../../components/AppButton';
 import {AppHeader} from '../../components/AppHeader';
@@ -39,6 +39,19 @@ export const EditStudentProfileScreen = ({navigation}: Props) => {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [saveSucceeded, setSaveSucceeded] = useState(false);
+
+  useEffect(() => {
+    if (!saveSucceeded) {
+      return;
+    }
+
+    const timeout = setTimeout(() => {
+      setSaveSucceeded(false);
+      navigation.goBack();
+    }, 1400);
+
+    return () => clearTimeout(timeout);
+  }, [navigation, saveSucceeded]);
 
   const openBirthdayPicker = () => {
     if (Platform.OS === 'android') {
@@ -233,17 +246,16 @@ export const EditStudentProfileScreen = ({navigation}: Props) => {
       </AppButton>
       <Text style={styles.saveHint}>Your changes will be visible on your profile right away.</Text>
       <Portal>
-        <Snackbar
+        {saveSucceeded ? (
+          <View
           accessibilityLabel="Profile updated"
-          duration={1400}
-          onDismiss={() => {
-            setSaveSucceeded(false);
-            navigation.goBack();
-          }}
           style={styles.successToast}
-          visible={saveSucceeded}>
-          Profile updated successfully.
-        </Snackbar>
+            accessibilityRole="alert">
+            <Text style={styles.successToastText}>
+              Profile updated successfully.
+            </Text>
+          </View>
+        ) : null}
       </Portal>
     </Screen>
   );
@@ -279,5 +291,6 @@ const styles = StyleSheet.create({
   sectionIcon: {alignItems: 'center', backgroundColor: '#EEF4FF', borderRadius: 11, height: 42, justifyContent: 'center', marginRight: 10, width: 42},
   sectionSubtitle: {color: '#7483A0', fontSize: 11, fontWeight: '600', marginTop: 2},
   sectionTitle: {color: '#102653', fontSize: 16, fontWeight: '900'},
-  successToast: {backgroundColor: '#176C3D', marginBottom: 18},
+  successToast: {alignSelf: 'center', backgroundColor: '#176C3D', borderRadius: 12, bottom: 26, elevation: 7, left: 20, paddingHorizontal: 18, paddingVertical: 14, position: 'absolute', right: 20, shadowColor: '#0E4B29', shadowOffset: {height: 5, width: 0}, shadowOpacity: 0.24, shadowRadius: 10},
+  successToastText: {color: '#FFFFFF', fontSize: 14, fontWeight: '700', textAlign: 'center'},
 });

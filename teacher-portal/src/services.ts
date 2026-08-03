@@ -115,6 +115,20 @@ export const saveAttendance = async (classId: string, date: string, teacherId: s
       createdAt: serverTimestamp(),
     }, {merge: true});
   });
+  const statusCounts = items.reduce<Record<string, number>>((counts, item) => {
+    counts[item.status] = (counts[item.status] || 0) + 1;
+    return counts;
+  }, {});
+  batch.set(doc(db, 'attendanceSessions', `${classId}_${date}`), {
+    classId,
+    date,
+    recordedBy: teacherId,
+    presentCount: statusCounts.present || 0,
+    totalCount: items.length,
+    statusCounts,
+    updatedAt: serverTimestamp(),
+    createdAt: serverTimestamp(),
+  }, {merge: true});
   await batch.commit();
 };
 
@@ -185,7 +199,7 @@ export const removeActivityMaterial = async (
   }
 };
 
-export const closeActivity = (id: string) => updateDoc(doc(db, 'activities', id), {status: 'closed', updatedAt: serverTimestamp()});
+export const closeActivity = (id: string) => updateDoc(doc(db, 'activities', id), {status: 'closed', closedAt: serverTimestamp(), updatedAt: serverTimestamp()});
 
 export const getSubmissions = async (activityId: string) => {
   const result = await getDocs(query(collection(db, 'activitySubmissions'), where('activityId', '==', activityId)));

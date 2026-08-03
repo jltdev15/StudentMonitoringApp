@@ -3,7 +3,7 @@ import type {RouteLocationNormalized} from 'vue-router';
 export type AccessState = {user: unknown | null; role: 'teacher' | 'student' | null; active: boolean};
 
 export function landingPage(role: AccessState['role']) {
-  return role === 'teacher' ? '/admin/overview' : role === 'student' ? '/student/overview' : '/login';
+  return role === 'teacher' ? '/admin/overview' : role === 'student' ? '/student/feed' : '/login';
 }
 
 export function resolveRouteAccess(to: Pick<RouteLocationNormalized, 'fullPath' | 'meta'>, state: AccessState) {

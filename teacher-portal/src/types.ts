@@ -93,6 +93,50 @@ export type ActivityRecord = {
   /** Legacy single-output field retained for existing activity records. */
   petaOutput?: ActivityMaterial | null;
   status: 'active' | 'closed';
+  closedAt?: Timestamp | Date | null;
+};
+
+export type FeedPostType = 'achievement' | 'attendance' | 'announcement' | 'student';
+export type StudentFeedPostPresetKey = 'ready_to_learn' | 'good_luck' | 'proud_of_class' | 'congratulations' | 'grateful';
+export type FeedCommentKey = 'congratulations' | 'great_job' | 'well_done' | 'keep_it_up' | 'proud_of_you';
+export type FeedAchiever = {
+  name: string;
+  score: number | null;
+};
+export type FeedPost = {
+  id: string;
+  type: FeedPostType;
+  sourceId: string;
+  title: string;
+  body: string;
+  authorId?: string;
+  authorLabel?: string;
+  authorPhotoUrl?: string;
+  presetKey?: StudentFeedPostPresetKey;
+  announcementType?: 'General' | 'Academic' | 'Events';
+  classLabel?: string;
+  schedule?: string;
+  sessionDate?: string;
+  presentCount?: number;
+  activityTitle?: string;
+  activityCategory?: ActivityCategory;
+  totalPoints?: number;
+  achieverResults?: FeedAchiever[];
+  /** Legacy name-only list retained while older feed posts are refreshed. */
+  achievers?: string[];
+  achieverCount?: number;
+  likeCount: number;
+  commentCount: number;
+  publishedAt?: Timestamp | Date | null;
+};
+
+export type FeedComment = {
+  id: string;
+  displayName: string;
+  commentKey: FeedCommentKey;
+  comment: string;
+  createdAt?: Timestamp | Date | null;
+  updatedAt?: Timestamp | Date | null;
 };
 
 export type SubmissionRecord = {

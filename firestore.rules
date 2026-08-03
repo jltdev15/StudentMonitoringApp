@@ -160,6 +160,12 @@ service cloud.firestore {
       allow delete: if ownsClass(resource.data.classId);
     }
 
+    match /attendanceSessions/{sessionId} {
+      allow read: if isTeacher() && ownsClass(resource.data.classId);
+      allow create, update: if ownsClass(request.resource.data.classId);
+      allow delete: if ownsClass(resource.data.classId);
+    }
+
     match /activities/{activityId} {
       allow read: if signedIn();
       allow create, update: if ownsClass(request.resource.data.classId);
@@ -205,6 +211,21 @@ service cloud.firestore {
           .hasOnly(['title', 'message', 'featured', 'updatedAt']);
       allow delete: if isTeacher()
         && resource.data.postedBy == request.auth.uid;
+    }
+
+    match /feedPosts/{postId} {
+      allow read: if isStudent();
+      allow write: if false;
+
+      match /likes/{studentUserId} {
+        allow read: if isStudent();
+        allow write: if false;
+      }
+
+      match /comments/{studentUserId} {
+        allow read: if isStudent();
+        allow write: if false;
+      }
     }
   }
 }

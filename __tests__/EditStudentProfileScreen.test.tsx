@@ -10,14 +10,10 @@ jest.mock('../src/services/studentService', () => ({
 }));
 jest.mock('react-native-paper', () => {
   const actual = jest.requireActual('react-native-paper');
-  const react = require('react');
-  const {View} = require('react-native');
 
   return {
     ...actual,
     Portal: ({children}: {children: React.ReactNode}) => children,
-    Snackbar: ({children, ...props}: {children: React.ReactNode}) =>
-      react.createElement(View, props, children),
   };
 });
 jest.mock('../src/components/AppHeader', () => ({AppHeader: () => null}));
@@ -46,6 +42,7 @@ const refreshProfile = jest.fn();
 const navigation = {goBack: jest.fn()};
 
 beforeEach(() => {
+  jest.useFakeTimers();
   jest.clearAllMocks();
   mockedUseAuth.mockReturnValue({
     refreshProfile,
@@ -58,6 +55,10 @@ beforeEach(() => {
   });
   mockedUpdateStudentProfile.mockResolvedValue(undefined);
   refreshProfile.mockResolvedValue(undefined);
+});
+
+afterEach(() => {
+  jest.useRealTimers();
 });
 
 it('saves only student-editable profile fields and returns to the profile', async () => {
@@ -88,7 +89,7 @@ it('saves only student-editable profile fields and returns to the profile', asyn
   expect(navigation.goBack).not.toHaveBeenCalled();
 
   await act(async () => {
-    tree.root.findByProps({accessibilityLabel: 'Profile updated'}).props.onDismiss();
+    jest.advanceTimersByTime(1400);
   });
   expect(navigation.goBack).toHaveBeenCalledTimes(1);
 });

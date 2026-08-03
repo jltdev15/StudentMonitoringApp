@@ -10,6 +10,7 @@ import {createUserWithEmailAndPassword, onAuthStateChanged, sendEmailVerificatio
 import {Timestamp} from 'firebase/firestore';
 import classTrackSymbol from '../assets/class-track-symbol.png';
 import AppBrand from '../components/shell/AppBrand.vue';
+import StudentFeedPage from '../components/feed/StudentFeedPage.vue';
 import {auth, isFirebaseConfigured} from '../firebase';
 import {createStudentUserProfile, getUserProfile} from '../services/auth.service';
 import {archiveClass, deleteClass, getClassesByIds, getTeacherClasses, saveClass} from '../services/classes.service';
@@ -18,10 +19,10 @@ import {getAttendance, getStudentAttendanceRecords, saveAttendance} from '../ser
 import {closeActivity, getActivities, getStudentActivities, removeActivityMaterial, saveActivity, uploadActivityMaterials} from '../services/activities.service';
 import {getAnnouncements, getStudentAnnouncements, saveAnnouncement, setAnnouncementFeatured} from '../services/announcements.service';
 import {getStudentSubmissions, getSubmissions, saveScores, submitStudentQuiz} from '../services/submissions.service';
-import {resetTeacherData} from '../services/administration.service';
+import {backfillStudentFeed, resetTeacherData} from '../services/administration.service';
 import type {ActivityCategory, ActivityMaterial, ActivityRecord, AnnouncementRecord, AttendanceRecord, AttendanceStatus, ClassRecord, QuizAnswer, QuizDocument, QuizQuestion, StudentRecord, SubmissionRecord, SubmissionStatus, UserProfile} from '../types';
 
-type View = 'dashboard' | 'classes' | 'students' | 'attendance' | 'activities' | 'announcements' | 'reports' | 'utilities' | 'profile' | 'take-quiz' | 'review-quiz';
+type View = 'dashboard' | 'feed' | 'classes' | 'students' | 'attendance' | 'activities' | 'announcements' | 'reports' | 'utilities' | 'profile' | 'take-quiz' | 'review-quiz';
 type Modal = 'class' | 'class-action' | 'student' | 'edit-profile' | 'profile-photo' | 'activity' | 'announcement' | 'scores' | 'reset' | 'answer-key' | 'logout' | 'confirm-next-question' | 'submit-quiz' | 'exit-quiz' | 'remove-material' | null;
 
 const route = useRoute();
@@ -33,6 +34,7 @@ const profile = ref<UserProfile | null>(null);
 const view = ref<View>('dashboard');
 const modal = ref<Modal>(null);
 const busy = ref(false);
+const feedBackfillBusy = ref(false);
 const imageConversionsInProgress = ref(0);
 const convertingImages = computed(() => imageConversionsInProgress.value > 0);
 const downloadingMaterialId = ref<string | null>(null);
@@ -70,7 +72,7 @@ const studentScoreViewingEnabled = false;
 const navItems = computed(() => {
   if (profile.value?.role === 'student') {
     return [
-      {id: 'dashboard', icon: 'home', label: 'Overview'}, {id: 'classes', icon: 'school', label: 'My Classes'},
+      {id: 'feed', icon: 'dynamic_feed', label: 'Feed'}, {id: 'classes', icon: 'school', label: 'My Classes'},
       {id: 'activities', icon: 'assignment', label: 'Activities & Scores'}, {id: 'attendance', icon: 'fact_check', label: 'My Attendance'},
       {id: 'announcements', icon: 'campaign', label: 'Announcements'},
     ] as {id: View; icon: string; label: string}[];
@@ -362,7 +364,7 @@ onMounted(() => onAuthStateChanged(auth, async user => {
       authStore.user = user;
       authStore.profile = nextProfile;
       await loadPortal();
-      if (route.meta.public) await router.replace(nextProfile.role === 'teacher' ? '/admin/overview' : '/student/overview');
+      if (route.meta.public) await router.replace(nextProfile.role === 'teacher' ? '/admin/overview' : '/student/feed');
     } else {
       profile.value = null;
       authStore.user = null;
@@ -745,7 +747,7 @@ async function downloadAttachment(material: ActivityMaterial, prefix: 'PETA' | '
 }
 function go(next: View) {
   const rolePrefix = profile.value?.role === 'student' ? '/student' : '/admin';
-  const segment = next === 'dashboard' ? 'overview' : next;
+  const segment = next === 'dashboard' ? (profile.value?.role === 'student' ? 'feed' : 'overview') : next;
   router.push({path: `${rolePrefix}/${segment}`, query: profile.value?.role === 'teacher' && selectedClassId.value ? {class: selectedClassId.value} : {}});
 }
 
@@ -959,6 +961,20 @@ async function resetData() {
     closeModal();
     showMessage(`Reset complete: ${totals.attendance} attendance records, ${totals.activities} activities, ${totals.activitySubmissions} submissions, and ${totals.announcements} announcements deleted.`);
   } catch (value) { showError(value); } finally { busy.value = false; }
+}
+
+async function runFeedBackfill() {
+  if (feedBackfillBusy.value) return;
+  feedBackfillBusy.value = true;
+  resetAlerts();
+  try {
+    const totals = await backfillStudentFeed();
+    showMessage(`Feed updated: ${totals.achievements} achievement posts, ${totals.attendance} attendance posts, and ${totals.announcements} announcements from the last ${totals.days} days.`);
+  } catch (value) {
+    showError(value);
+  } finally {
+    feedBackfillBusy.value = false;
+  }
 }
 
 function startQuiz(activity: ActivityRecord) {
@@ -1195,7 +1211,7 @@ function getOptionClass(q: QuizQuestion, i: number | string, oIndex: number | st
         </aside>
       </div>
     </Transition>
-    <section class="workspace"><header v-if="view !== 'take-quiz' && view !== 'profile'"><div><p class="eyebrow">{{ todayLabel }}</p><h1>Good day, {{ userName }}</h1><p v-if="profile?.role === 'student'" class="student-academic-context"><span>{{ studentAcademicLabel }}</span></p></div><div class="header-actions"><select v-if="view !== 'classes' && classes.length" v-model="selectedClassId" aria-label="Select class"><option v-for="item in classes" :key="item.id" :value="item.id">{{ item.className }} · {{ item.section }}</option></select><button class="icon-button" title="Refresh" @click="loadPortal">↻</button></div></header>
+    <section class="workspace"><header v-if="view !== 'take-quiz' && view !== 'profile' && !(profile?.role === 'student' && view === 'feed')"><div><p class="eyebrow">{{ todayLabel }}</p><h1>Good day, {{ userName }}</h1><p v-if="profile?.role === 'student'" class="student-academic-context"><span>{{ studentAcademicLabel }}</span></p></div><div class="header-actions"><select v-if="view !== 'classes' && classes.length" v-model="selectedClassId" aria-label="Select class"><option v-for="item in classes" :key="item.id" :value="item.id">{{ item.className }} · {{ item.section }}</option></select><button class="icon-button" title="Refresh" @click="loadPortal">↻</button></div></header>
       <div v-if="error" class="alert error">{{ error }}</div><div v-if="message" class="alert success">{{ message }}</div>
       <template v-if="profile?.role === 'teacher'">
       <section v-if="view === 'dashboard'" class="page"><div class="hero-card"><div><p class="eyebrow">TODAY'S PULSE</p><h2>{{ selectedClass ? selectedClass.className : 'Start your class workspace' }}</h2><p>{{ selectedClass ? `${students.length} enrolled learners · ${todayLabel}` : 'Create a class to start managing student records.' }}</p><button class="light-button" @click="go('attendance')">Take attendance <span>→</span></button></div><div class="hero-orb">{{ todaySummary.present || 0 }}<small>present</small></div></div><div class="stat-grid"><article><span class="stat-icon blue">♙</span><div><strong>{{ students.length }}</strong><small>Students</small></div></article><article><span class="stat-icon green">✓</span><div><strong>{{ todaySummary.present || 0 }}</strong><small>Present today</small></div></article><article><span class="stat-icon orange">◷</span><div><strong>{{ todaySummary.late || 0 }}</strong><small>Late today</small></div></article><article><span class="stat-icon red">—</span><div><strong>{{ todaySummary.absent || 0 }}</strong><small>Absent today</small></div></article></div><div class="section-grid"><article class="panel"><div class="panel-title"><h3>Quick actions</h3></div><div class="quick-grid"><button @click="go('attendance')"><b>✓</b>Take attendance</button><button @click="openModal('activity')"><b>＋</b>Create activity</button><button @click="openModal('student')"><b>♙</b>Add student</button><button @click="openModal('announcement')"><b>◉</b>Post announcement</button></div></article><article class="panel"><div class="panel-title"><h3>Upcoming activities</h3><button class="text-button" @click="go('activities')">View all</button></div><div v-if="activeActivities.length" class="compact-list"><div v-for="item in activeActivities.slice(0, 4)" :key="item.id"><span class="date-square">{{ isoDate(item.dueDate).split(' ')[1] || '—' }}</span><div><strong>{{ item.title }}</strong><small>Due {{ isoDate(item.dueDate) }}</small></div><b>{{ item.totalPoints }} pts</b></div></div><p v-else class="empty-copy">No open activities for this class.</p></article></div></section>
@@ -1235,11 +1251,12 @@ function getOptionClass(q: QuizQuestion, i: number | string, oIndex: number | st
       </section>
       <section v-else-if="view === 'announcements'" class="page"><div class="page-heading"><div><h2>Announcements</h2><p>Keep students updated with timely class information.</p></div><button class="primary" @click="openModal('announcement')">＋ New announcement</button></div><div v-if="announcements.length" class="announcement-list"><article v-for="item in announcements" :key="item.id"><div class="announcement-icon">◉</div><div><div class="announcement-meta"><span class="tag">{{ item.announcementType || 'General' }}</span><span class="announcement-audience">{{ item.classId ? classes.find(c => c.id === item.classId)?.className || 'Class' : 'All students' }}</span><button :class="['featured-toggle', {enabled: item.featured}]" :aria-pressed="item.featured === true" :disabled="busy" @click="toggleFeatured(item.id, !item.featured)"><span>{{ item.featured ? '★' : '☆' }}</span>{{ item.featured ? 'Featured' : 'Feature' }}</button></div><h3>{{ item.title }}</h3><p>{{ item.message }}</p></div></article></div><div v-else class="empty-state"><b>◉</b><h3>Nothing announced yet</h3><p>Post your first update for students.</p></div></section>
       <section v-else-if="view === 'reports'" class="page"><div class="page-heading"><div><h2>Class report</h2><p>A quick view of engagement for {{ selectedClass?.className || 'your selected class' }}.</p></div><button class="secondary" @click="go('attendance')">Review attendance</button></div><div class="report-grid"><article class="panel report-card"><p class="eyebrow">ATTENDANCE</p><strong>{{ students.length ? Math.round(((todaySummary.present || 0) / students.length) * 100) : 0 }}%</strong><p>Present on {{ attendanceDate }}</p><div class="progress"><span :style="{width: `${students.length ? ((todaySummary.present || 0) / students.length) * 100 : 0}%`}"></span></div></article><article class="panel report-card"><p class="eyebrow">CLASS ROSTER</p><strong>{{ students.length }}</strong><p>Active learners enrolled</p><div class="progress blue"><span :style="{width: `${Math.min(students.length * 5, 100)}%`}"></span></div></article><article class="panel report-card"><p class="eyebrow">OPEN ACTIVITIES</p><strong>{{ activeActivities.length }}</strong><p>Ready for student work</p><div class="progress purple"><span :style="{width: `${Math.min(activeActivities.length * 20, 100)}%`}"></span></div></article></div><article class="panel report-table"><div class="panel-title"><h3>Activity score overview</h3></div><div v-if="activities.length" class="compact-list"><div v-for="activity in activities" :key="activity.id"><span class="date-square">{{ activity.totalPoints }}</span><div><strong>{{ activity.title }}</strong><small>{{ activity.status === 'active' ? 'Open for scoring' : 'Closed' }}</small></div><button class="text-button" @click="openScores(activity)">Open scores</button></div></div><p v-else class="empty-copy">Create an activity to start building a score report.</p></article></section>
-      <section v-else-if="view === 'utilities'" class="page"><div class="page-heading"><div><p class="eyebrow">ADMINISTRATION</p><h2>Utilities</h2><p>Maintain your teaching workspace and class records.</p></div></div><article class="panel danger-zone"><div class="utility-icon">↻</div><div><p class="eyebrow">DANGER ZONE</p><h3>Reset teaching data</h3><p>Permanently remove all attendance records, activities, activity submissions, and announcements that belong to you. Your classes and student rosters will remain.</p><ul><li>All classes managed by your teacher account are included.</li><li>This action cannot be undone.</li></ul></div><button class="danger-button" @click="openModal('reset')">Reset data</button></article></section>
+      <section v-else-if="view === 'utilities'" class="page"><div class="page-heading"><div><p class="eyebrow">ADMINISTRATION</p><h2>Utilities</h2><p>Maintain your teaching workspace and class records.</p></div></div><div class="utilities-stack"><article class="panel feed-maintenance-zone"><div class="utility-icon feed-icon">≋</div><div><p class="eyebrow">STUDENT FEED</p><h3>Backfill recent updates</h3><p>Publish eligible global announcements, scheduled attendance summaries, and activity achievers from the last 30 days. This action is safe to run more than once.</p></div><button class="primary" :disabled="feedBackfillBusy" @click="runFeedBackfill">{{ feedBackfillBusy ? 'Updating…' : 'Update student feed' }}</button></article><article class="panel danger-zone"><div class="utility-icon">↻</div><div><p class="eyebrow">DANGER ZONE</p><h3>Reset teaching data</h3><p>Permanently remove all attendance records, activities, activity submissions, and announcements that belong to you. Your classes and student rosters will remain.</p><ul><li>All classes managed by your teacher account are included.</li><li>This action cannot be undone.</li></ul></div><button class="danger-button" @click="openModal('reset')">Reset data</button></article></div></section>
       </template>
 
       <template v-else-if="profile?.role === 'student'">
-        <section v-if="view === 'dashboard'" class="page">
+        <StudentFeedPage v-if="view === 'feed'" :student-user-id="currentUser?.uid || ''" :student-photo-url="studentProfilePhotoUrl" :student-full-name="myStudentRecord?.fullName || profile?.fullName || ''" />
+        <section v-else-if="view === 'dashboard'" class="page">
           <div class="hero-card"><div><p class="eyebrow">TODAY'S PULSE</p><h2>Keep track of your learning</h2><p>{{ myClasses.length }} enrolled classes · {{ todayLabel }}</p></div><div class="hero-orb">{{ myClasses.length }}<small>classes</small></div></div>
           <div class="stat-grid">
             <article><span class="stat-icon blue">▦</span><div><strong>{{ myClasses.length }}</strong><small>Classes</small></div></article>
@@ -1348,7 +1365,7 @@ function getOptionClass(q: QuizQuestion, i: number | string, oIndex: number | st
         </section>
 
         <section v-else-if="view === 'profile'" class="page student-profile-page">
-          <div class="page-heading"><div><p class="eyebrow">STUDENT ACCOUNT</p><h2>My profile</h2><p>Your identity, enrollment, and contact information.</p></div><div class="profile-page-actions"><button class="profile-edit-button" type="button" :disabled="!myStudentRecord" @click="openStudentProfileEditor"><span aria-hidden="true">✎</span>Edit profile</button><button class="profile-signout-button" type="button" @click="openModal('logout')"><span aria-hidden="true">↪</span>Sign out</button></div></div>
+          <div class="page-heading"><div><p class="eyebrow">STUDENT ACCOUNT</p><h2>My profile</h2><p>Your identity, enrollment, and contact information.</p></div></div>
           <article class="student-profile-hero">
             <button class="student-profile-avatar-upload" :class="{uploading: profilePhotoUploading}" type="button" aria-label="Update profile photo" :disabled="!myStudentRecord || profilePhotoUploading" @click="openModal('profile-photo')">
               <span class="student-profile-avatar">
@@ -1366,6 +1383,7 @@ function getOptionClass(q: QuizQuestion, i: number | string, oIndex: number | st
             <article class="panel student-profile-card"><div class="profile-card-heading"><span aria-hidden="true">▦</span><div><h3>Academic enrollment</h3><p>Your active grade, section, and classes.</p></div></div><dl><div><dt>Grade and section</dt><dd>{{ studentAcademicLabel }}</dd></div><div><dt>Active classes</dt><dd>{{ myClasses.length }}</dd></div></dl><div v-if="myClasses.length" class="profile-class-list"><div v-for="classRecord in myClasses" :key="classRecord.id"><span><strong>{{ classRecord.className }}</strong><small>{{ classRecord.subject }}</small></span><b>{{ classRecord.gradeLevel }} · {{ classRecord.section }}</b></div></div><p v-else class="profile-empty-note">No active classes are currently assigned.</p></article>
             <article class="panel student-profile-card"><div class="profile-card-heading"><span aria-hidden="true">♢</span><div><h3>Guardian information</h3><p>Emergency and guardian contact on record.</p></div></div><dl><div><dt>Guardian name</dt><dd>{{ myStudentRecord?.guardianName || 'Not provided' }}</dd></div><div><dt>Guardian contact</dt><dd>{{ myStudentRecord?.guardianContact || 'Not provided' }}</dd></div></dl></article>
           </div>
+          <footer class="profile-page-actions profile-page-footer" aria-label="Profile actions"><button class="profile-edit-button" type="button" :disabled="!myStudentRecord" @click="openStudentProfileEditor"><span aria-hidden="true">✎</span>Edit profile</button><button class="profile-signout-button" type="button" @click="openModal('logout')"><span aria-hidden="true">↪</span>Sign out</button></footer>
         </section>
 
         <section v-else-if="view === 'take-quiz' && takingQuiz" class="page quiz-page">

@@ -113,7 +113,11 @@ export const updateActivity = (
   });
 
 export const closeActivity = (activityId: string) =>
-  updateActivity(activityId, {status: 'closed'});
+  updateDoc(docRef(collections.activities, activityId), {
+    status: 'closed',
+    closedAt: now(),
+    updatedAt: now(),
+  });
 
 export const deleteActivity = async (activityId: string) => {
   const submissions = await getDocs(

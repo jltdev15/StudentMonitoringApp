@@ -13,7 +13,9 @@ export const collections = {
   classes: 'classes',
   students: 'students',
   attendance: 'attendance',
+  attendanceSessions: 'attendanceSessions',
   activities: 'activities',
   submissions: 'activitySubmissions',
   announcements: 'announcements',
+  feedPosts: 'feedPosts',
 };

@@ -8,7 +8,8 @@ const mocks = vi.hoisted(() => ({
   router: {push: vi.fn(), replace: vi.fn()},
 }));
 vi.mock('vue-router', () => ({useRoute: () => mocks.route, useRouter: () => mocks.router}));
-vi.mock('../firebase', () => ({auth: {currentUser: null}, isFirebaseConfigured: true}));
+vi.mock('../firebase', () => ({auth: {currentUser: null}, functions: {}, isFirebaseConfigured: true}));
+vi.mock('firebase/functions', () => ({httpsCallable: vi.fn(() => vi.fn())}));
 vi.mock('firebase/auth', () => ({
   onAuthStateChanged: vi.fn((_auth, callback) => { callback(null); return vi.fn(); }),
   createUserWithEmailAndPassword: vi.fn(), sendEmailVerification: vi.fn(), signInWithEmailAndPassword: vi.fn(), signOut: vi.fn(),
@@ -22,7 +23,7 @@ vi.mock('../services/attendance.service', () => ({getAttendance: vi.fn(async () 
 vi.mock('../services/activities.service', () => ({closeActivity: vi.fn(), getActivities: vi.fn(async () => []), getStudentActivities: vi.fn(async () => []), removeActivityMaterial: vi.fn(), saveActivity: vi.fn(), uploadActivityMaterials: vi.fn(async () => [])}));
 vi.mock('../services/announcements.service', () => ({getAnnouncements: vi.fn(async () => []), getStudentAnnouncements: vi.fn(async () => []), saveAnnouncement: vi.fn(), setAnnouncementFeatured: vi.fn()}));
 vi.mock('../services/submissions.service', () => ({getStudentSubmissions: vi.fn(async () => []), getSubmissions: vi.fn(async () => []), saveScores: vi.fn(), submitStudentQuiz: vi.fn()}));
-vi.mock('../services/administration.service', () => ({resetTeacherData: vi.fn()}));
+vi.mock('../services/administration.service', () => ({backfillStudentFeed: vi.fn(), resetTeacherData: vi.fn()}));
 
 describe('PortalApplication', () => {
   it('renders the sign-in state after authentication initializes', async () => {

@@ -87,6 +87,7 @@ export type ActivityRecord = {
   status: ActivityStatus;
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
+  closedAt?: Timestamp;
 };
 
 export type ActivityAttachment = {

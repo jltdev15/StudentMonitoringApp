@@ -5,6 +5,10 @@
   "engines": {
     "node": "20"
   },
+  "scripts": {
+    "test": "node --test",
+    "backfill:feed": "node scripts/backfillFeed.js"
+  },
   "dependencies": {
     "firebase-admin": "^13.10.0",
     "firebase-functions": "^7.2.5"

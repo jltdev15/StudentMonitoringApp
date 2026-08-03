@@ -53,9 +53,11 @@ users/{userId}
 classes/{classId}
 students/{studentId}
 attendance/{attendanceId}
+attendanceSessions/{classId}_{YYYY-MM-DD}
 activities/{activityId}
 activitySubmissions/{submissionId}
 announcements/{announcementId}
+feedPosts/{feedPostId}
 ```
 
 Attendance IDs use:
