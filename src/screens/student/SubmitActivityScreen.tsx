@@ -21,6 +21,7 @@ import {
 } from '../../services/activityService';
 import {ActivitySubmissionRecord} from '../../types/models';
 import {StudentStackParamList} from '../../types/navigation';
+import {ensureCameraPermission} from '../../utils/cameraPermission';
 
 type Props = NativeStackScreenProps<StudentStackParamList, 'SubmitActivity'>;
 
@@ -106,6 +107,11 @@ export const SubmitActivityScreen = ({route, navigation}: Props) => {
   };
 
   const takePhoto = async () => {
+    if (!(await ensureCameraPermission())) {
+      setError('Allow camera access in your device settings to take a photo.');
+      return;
+    }
+
     const response = await launchCamera({
       mediaType: 'photo',
       maxWidth: 2048,

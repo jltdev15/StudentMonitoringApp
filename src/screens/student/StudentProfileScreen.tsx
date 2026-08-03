@@ -26,6 +26,7 @@ import {
 } from '../../services/studentService';
 import {ClassRecord} from '../../types/models';
 import {StudentStackParamList} from '../../types/navigation';
+import {ensureCameraPermission} from '../../utils/cameraPermission';
 
 type Props = Pick<
   NativeStackScreenProps<StudentStackParamList, 'StudentProfile'>,
@@ -179,6 +180,14 @@ export const StudentProfileScreen = ({navigation}: Props) => {
 
     setPhotoUploading(true);
     try {
+      if (source === 'camera' && !(await ensureCameraPermission())) {
+        Alert.alert(
+          'Camera permission needed',
+          'Allow camera access in your device settings to take a profile photo.',
+        );
+        return;
+      }
+
       const response =
         source === 'camera'
           ? await launchCamera({

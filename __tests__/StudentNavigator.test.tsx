@@ -1,5 +1,6 @@
 import React from 'react';
 import renderer, {act} from 'react-test-renderer';
+import {View} from 'react-native';
 import {StudentTabBar} from '../src/navigation/StudentNavigator';
 
 jest.mock('react-native-safe-area-context', () => ({
@@ -53,6 +54,18 @@ it('renders all five student tabs and marks the selected tab', async () => {
   expect(tree.root.findByProps({accessibilityLabel: 'Activities tab'})).toBeTruthy();
   expect(tree.root.findByProps({accessibilityLabel: 'News tab'})).toBeTruthy();
   expect(tree.root.findByProps({accessibilityLabel: 'Profile tab'})).toBeTruthy();
+  expect(
+    tree.root
+      .findAllByType(View)
+      .some(view =>
+        Array.isArray(view.props.style) &&
+        view.props.style.some(
+          (style: {backgroundColor?: string} | false) =>
+            typeof style === 'object' &&
+            style.backgroundColor === '#F8FAFC',
+        ),
+      ),
+  ).toBe(true);
 });
 
 it('opens another tab without dispatching navigation for the current tab', async () => {

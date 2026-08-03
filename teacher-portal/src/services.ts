@@ -1,5 +1,6 @@
 import {
   addDoc,
+  arrayRemove,
   collection,
   doc,
   getDoc,
@@ -14,7 +15,7 @@ import {
   type DocumentData,
   type QueryDocumentSnapshot,
 } from 'firebase/firestore';
-import {getDownloadURL, ref as storageRef, uploadBytes} from 'firebase/storage';
+import {deleteObject, getDownloadURL, ref as storageRef, uploadBytes} from 'firebase/storage';
 import {db, storage} from './firebase';
 import type {
   ActivityMaterial,
@@ -52,6 +53,11 @@ export const saveClass = async (teacherId: string, payload: Omit<ClassRecord, 'i
   return ref.id;
 };
 
+export const archiveClass = (classId: string) => updateDoc(doc(db, 'classes', classId), {
+  status: 'archived',
+  updatedAt: serverTimestamp(),
+});
+
 export const getStudentsByClass = async (classId: string) => {
   const result = await getDocs(query(collection(db, 'students'), where('classIds', 'array-contains', classId), where('status', '==', 'active')));
   return result.docs.map(item => record<StudentRecord>(item)).sort((a, b) => a.fullName.localeCompare(b.fullName));
@@ -75,6 +81,20 @@ export const saveStudent = async (payload: Omit<StudentRecord, 'id' | 'status'>,
 };
 
 export const archiveStudent = (id: string) => updateDoc(doc(db, 'students', id), {status: 'inactive', updatedAt: serverTimestamp()});
+
+export const updateStudentProfile = async (
+  studentId: string,
+  payload: Pick<StudentRecord, 'contactNumber' | 'guardianName' | 'guardianContact'> & {dateOfBirth: string; gender: string},
+) => {
+  await updateDoc(doc(db, 'students', studentId), {
+    contactNumber: payload.contactNumber.trim(),
+    dateOfBirth: payload.dateOfBirth,
+    gender: payload.gender.trim(),
+    guardianName: payload.guardianName.trim(),
+    guardianContact: payload.guardianContact.trim(),
+    updatedAt: serverTimestamp(),
+  });
+};
 
 export const attendanceIdFor = (classId: string, studentId: string, date: string) => `${classId}_${studentId}_${date}`;
 
@@ -133,6 +153,37 @@ export const uploadActivityMaterials = async (activityId: string, files: File[])
       order: index,
     };
   }));
+
+export const removeActivityMaterial = async (
+  activityId: string,
+  material: ActivityMaterial,
+  kind: 'material' | 'peta-output',
+) => {
+  const activityRef = doc(db, 'activities', activityId);
+  const snapshot = await getDoc(activityRef);
+  if (!snapshot.exists()) throw new Error('The activity no longer exists.');
+
+  const activity = snapshot.data() as ActivityRecord;
+  if (kind === 'material') {
+    await updateDoc(activityRef, {
+      materials: (activity.materials || []).filter(item => item.id !== material.id),
+      updatedAt: serverTimestamp(),
+    });
+  } else {
+    const outputs = activity.petaOutputs || (activity.petaOutput ? [activity.petaOutput] : []);
+    await updateDoc(activityRef, {
+      petaOutputs: outputs.filter(item => item.id !== material.id),
+      petaOutput: null,
+      updatedAt: serverTimestamp(),
+    });
+  }
+
+  try {
+    await deleteObject(storageRef(storage, material.storagePath));
+  } catch (value) {
+    if (!(typeof value === 'object' && value && 'code' in value && value.code === 'storage/object-not-found')) throw value;
+  }
+};
 
 export const closeActivity = (id: string) => updateDoc(doc(db, 'activities', id), {status: 'closed', updatedAt: serverTimestamp()});
 
@@ -216,6 +267,44 @@ const deleteQuery = async (source: ReturnType<typeof query>) => {
   }
 };
 
+export const deleteClass = async (classId: string) => {
+  const classSnapshot = await getDoc(doc(db, 'classes', classId));
+  if (!classSnapshot.exists()) throw new Error('The class no longer exists.');
+
+  const activitySnapshot = await getDocs(query(collection(db, 'activities'), where('classId', '==', classId)));
+  const storagePaths = activitySnapshot.docs.flatMap(item => {
+    const activity = item.data() as ActivityRecord;
+    return [...(activity.materials || []), ...(activity.petaOutputs || []), ...(activity.petaOutput ? [activity.petaOutput] : [])]
+      .map(material => material.storagePath)
+      .filter(Boolean);
+  });
+  await Promise.all(storagePaths.map(async path => {
+    try {
+      await deleteObject(storageRef(storage, path));
+    } catch (value) {
+      if (!(typeof value === 'object' && value && 'code' in value && value.code === 'storage/object-not-found')) throw value;
+    }
+  }));
+
+  const roster = await getDocs(query(collection(db, 'students'), where('classIds', 'array-contains', classId)));
+  for (const rosterChunk of chunks(roster.docs, 400)) {
+    const batch = writeBatch(db);
+    rosterChunk.forEach(student => batch.update(student.ref, {classIds: arrayRemove(classId), updatedAt: serverTimestamp()}));
+    await batch.commit();
+  }
+
+  const totals = {
+    attendance: await deleteQuery(query(collection(db, 'attendance'), where('classId', '==', classId))),
+    submissions: await deleteQuery(query(collection(db, 'activitySubmissions'), where('classId', '==', classId))),
+    announcements: await deleteQuery(query(collection(db, 'announcements'), where('classId', '==', classId))),
+    activities: await deleteQuery(query(collection(db, 'activities'), where('classId', '==', classId))),
+  };
+  // Keep a minimal tombstone because existing production rules intentionally
+  // disallow deleting class documents. All user-facing and related data is removed.
+  await updateDoc(doc(db, 'classes', classId), {status: 'deleted', updatedAt: serverTimestamp()});
+  return {...totals, studentsUpdated: roster.size, filesRemoved: storagePaths.length};
+};
+
 export const resetTeacherData = async (teacherId: string): Promise<ResetTotals> => {
   const ownedClasses = await getDocs(query(collection(db, 'classes'), where('teacherId', '==', teacherId)));
   const classIds = ownedClasses.docs.map(item => item.id);
@@ -243,7 +332,7 @@ export const getClassesByIds = async (classIds: string[]) => {
   const result: ClassRecord[] = [];
   for (const chunk of chunks(classIds, 30)) {
     const snapshot = await getDocs(query(collection(db, 'classes'), where('__name__', 'in', chunk)));
-    result.push(...snapshot.docs.map(item => record<ClassRecord>(item)));
+    result.push(...snapshot.docs.map(item => record<ClassRecord>(item)).filter(item => item.status === 'active'));
   }
   return result.sort((a, b) => a.className.localeCompare(b.className));
 };

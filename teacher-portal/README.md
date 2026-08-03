@@ -1,29 +1,44 @@
-# ClassTrack Teacher Portal
+# ClassTrack Web Portal
 
-Vue 3 teacher workspace connected to the same Firebase Authentication and Firestore data used by the mobile app.
+Vue 3 + TypeScript portal for teachers and students, connected to the same Firebase Authentication, Firestore, and Storage data as the mobile app.
 
 ## Connect Firebase
 
-The native mobile configuration does not include a Firebase Web App ID, so create a **Web app** in the existing Firebase project (`student-mngt-6ca8e`) first. Copy its configuration from Firebase Console into a new `.env` file based on `.env.example`.
+Create a Firebase Web app in the existing project and copy its configuration into `.env` using `.env.example`. Enable Email/Password authentication and authorize the deployed portal domain. Accounts require an active `users/{uid}` profile with a `teacher` or `student` role.
 
-Enable **Email/Password** in Firebase Authentication and add the final portal domain to Firebase Authentication's authorized domains before publishing. Teacher accounts must have an active `users/{uid}` profile with `role: 'teacher'`, matching the existing mobile app permissions.
-
-## Run locally
+## Commands
 
 ```bash
 npm install
 npm run dev
+npm run typecheck
+npm run test:run
+npm run test:coverage
+npm run build
 ```
 
-## Main functions
+Vitest uses jsdom and mocked Firebase boundaries. GitHub Actions runs type checking, coverage, and the production build for portal-related changes.
 
-- Teacher sign-in and role validation
-- Class and student roster management
-- Daily attendance with present, late, absent, and excused statuses
-- Activities, score encoding, and activity closing
-- Class and general announcements
-- Dashboard and basic class reports
-- A guarded Utilities reset that deletes the signed-in teacher's attendance,
-  activities, activity submissions, and announcements while preserving classes
-  and student rosters. Deploy the `resetTeacherData` Cloud Function for this
-  action to become available.
+## Routes
+
+- Public: `/login`, `/register/verify`, `/register/account`, `/verify-email`
+- Teacher: `/admin/overview`, `/admin/classes`, `/admin/students`, `/admin/attendance`, `/admin/activities`, `/admin/announcements`, `/admin/reports`, `/admin/utilities`
+- Student: `/student/overview`, `/student/classes`, `/student/activities`, `/student/attendance`, `/student/announcements`, `/student/profile`
+- Quiz: `/student/activities/:activityId/take` and `/student/activities/:activityId/review`
+
+Guards wait for Firebase Authentication initialization before enforcing active profiles and roles. The selected teacher class is represented by `?class=<classId>` so class context survives navigation and direct links.
+
+## Architecture
+
+- `src/router` owns URL routing and role access policy.
+- `src/stores` owns authentication, teacher/student workspace state, selected class, and notifications.
+- `src/services` provides domain-specific Firebase boundaries; components and stores do not import Firebase SDK modules directly.
+- `src/composables` contains reusable dialog, navigation, WebP optimization, and file download behavior.
+- `src/components` contains reusable shell and feedback UI.
+- `src/domain` contains typed, Firebase-independent quiz extraction and scoring.
+
+`App.vue` is intentionally a small composition root containing only `RouterView` and global feedback.
+
+## Firebase Hosting
+
+The repository `firebase.json` serves `teacher-portal/dist` and rewrites all application paths to `index.html`, so direct links and browser refreshes work. Run `npm run build` before deploying Firebase Hosting.

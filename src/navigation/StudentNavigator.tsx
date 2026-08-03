@@ -175,7 +175,7 @@ const renderStudentTabBar = (props: BottomTabBarProps) => (
 
 export const StudentNavigator = () => (
   <Tab.Navigator
-    sceneContainerStyle={styles.transparentScene}
+    sceneContainerStyle={styles.sceneContainer}
     screenOptions={{
       headerShown: false,
       tabBarStyle: {
@@ -215,9 +215,9 @@ export const StudentNavigator = () => (
 );
 
 const styles = StyleSheet.create({
-  transparentScene: {backgroundColor: 'transparent'},
+  sceneContainer: {backgroundColor: '#F8FAFC'},
   tabBarShell: {
-    backgroundColor: 'transparent',
+    backgroundColor: '#F8FAFC',
     paddingHorizontal: 16,
     paddingTop: 8,
   },

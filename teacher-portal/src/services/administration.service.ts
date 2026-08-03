@@ -1,0 +1,1 @@
+export {resetTeacherData} from '../services';

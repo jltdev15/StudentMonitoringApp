@@ -3,6 +3,26 @@ import type {Timestamp} from 'firebase/firestore';
 export type AttendanceStatus = 'present' | 'absent' | 'late' | 'excused';
 export type SubmissionStatus = 'submitted' | 'missing' | 'late' | 'excused';
 export type ActivityCategory = 'peta' | 'quiz' | 'coding';
+export type QuizAnswer = string | number | boolean | null;
+export type QuizOptions = QuizAnswer[] | Record<string, QuizAnswer>;
+export type QuizQuestion = {
+  id?: string;
+  question?: string;
+  text?: string;
+  options?: QuizOptions;
+  choices?: QuizOptions;
+  answer?: QuizAnswer;
+  correctAnswer?: QuizAnswer;
+  correct?: QuizAnswer;
+  [key: string]: unknown;
+};
+export type QuizDocument = QuizQuestion[] | {
+  questions?: QuizQuestion[];
+  items?: QuizQuestion[];
+  data?: QuizQuestion[];
+  quiz?: QuizQuestion[];
+  [key: string]: unknown;
+};
 
 export type UserProfile = {
   uid: string;
@@ -20,7 +40,7 @@ export type ClassRecord = {
   section: string;
   teacherId: string;
   schedule: string;
-  status: 'active' | 'archived';
+  status: 'active' | 'archived' | 'deleted';
 };
 
 export type StudentRecord = {
@@ -30,8 +50,11 @@ export type StudentRecord = {
   fullName: string;
   email: string;
   contactNumber: string;
+  dateOfBirth?: string;
+  gender?: string;
   guardianName: string;
   guardianContact: string;
+  photoUrl?: string;
   classIds: string[];
   status: 'active' | 'inactive';
 };
@@ -64,7 +87,7 @@ export type ActivityRecord = {
   totalPoints: number;
   createdBy: string;
   activityCategory?: ActivityCategory;
-  quizData?: any;
+  quizData?: QuizDocument;
   materials?: ActivityMaterial[];
   petaOutputs?: ActivityMaterial[];
   /** Legacy single-output field retained for existing activity records. */
@@ -79,7 +102,7 @@ export type SubmissionRecord = {
   studentId: string;
   status: SubmissionStatus;
   score: number | null;
-  answers?: Record<string, any>;
+  answers?: Record<string, QuizAnswer>;
   remarks: string;
 };
 

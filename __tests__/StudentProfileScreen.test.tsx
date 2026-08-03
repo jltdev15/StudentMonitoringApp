@@ -5,12 +5,16 @@ import {StudentProfileScreen} from '../src/screens/student/StudentProfileScreen'
 import {useAuth} from '../src/context/AuthContext';
 import {getClassById} from '../src/services/classService';
 import {uploadStudentProfilePhoto} from '../src/services/studentService';
-import {launchImageLibrary} from 'react-native-image-picker';
+import {launchCamera, launchImageLibrary} from 'react-native-image-picker';
+import {ensureCameraPermission} from '../src/utils/cameraPermission';
 
 jest.mock('../src/context/AuthContext', () => ({useAuth: jest.fn()}));
 jest.mock('../src/services/classService', () => ({getClassById: jest.fn()}));
 jest.mock('../src/services/studentService', () => ({
   uploadStudentProfilePhoto: jest.fn(),
+}));
+jest.mock('../src/utils/cameraPermission', () => ({
+  ensureCameraPermission: jest.fn(),
 }));
 jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({bottom: 0, left: 0, right: 0, top: 0}),
@@ -60,6 +64,8 @@ const mockedUseAuth = useAuth as jest.Mock;
 const mockedGetClassById = getClassById as jest.Mock;
 const mockedUploadStudentProfilePhoto = uploadStudentProfilePhoto as jest.Mock;
 const mockedLaunchImageLibrary = launchImageLibrary as jest.Mock;
+const mockedLaunchCamera = launchCamera as jest.Mock;
+const mockedEnsureCameraPermission = ensureCameraPermission as jest.Mock;
 const mockedSignOut = jest.fn();
 const mockedRefreshProfile = jest.fn();
 const mockedNavigation = {navigate: jest.fn()};
@@ -113,6 +119,7 @@ beforeEach(() => {
   });
   mockedRefreshProfile.mockResolvedValue(undefined);
   mockedUploadStudentProfilePhoto.mockResolvedValue('https://example.com/avatar.jpg');
+  mockedEnsureCameraPermission.mockResolvedValue(true);
 });
 
 it('shows the cover-profile identity and primary active class details', async () => {
@@ -179,6 +186,61 @@ it('selects a gallery image, uploads it, and refreshes the profile', async () =>
   expect(alertSpy).toHaveBeenLastCalledWith(
     'Profile photo updated',
     'Your new profile photo is now visible.',
+  );
+  alertSpy.mockRestore();
+});
+
+it('obtains camera permission before opening the profile photo camera', async () => {
+  mockedGetClassById.mockResolvedValue(null);
+  mockedLaunchCamera.mockResolvedValue({
+    assets: [
+      {
+        fileSize: 1024,
+        type: 'image/jpeg',
+        uri: 'file:///camera-profile.jpg',
+      },
+    ],
+  });
+  const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(jest.fn());
+  const tree = await renderScreen();
+
+  await act(async () => {
+    tree.root
+      .findByProps({accessibilityLabel: 'Update profile photo'})
+      .props.onPress();
+  });
+  const options = alertSpy.mock.calls[0][2] as Array<{onPress?: () => void}>;
+  await act(async () => {
+    options[0].onPress?.();
+  });
+
+  expect(mockedEnsureCameraPermission).toHaveBeenCalledTimes(1);
+  expect(mockedLaunchCamera).toHaveBeenCalledWith(
+    expect.objectContaining({cameraType: 'front', mediaType: 'photo'}),
+  );
+  alertSpy.mockRestore();
+});
+
+it('does not open the camera when profile camera permission is denied', async () => {
+  mockedGetClassById.mockResolvedValue(null);
+  mockedEnsureCameraPermission.mockResolvedValue(false);
+  const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(jest.fn());
+  const tree = await renderScreen();
+
+  await act(async () => {
+    tree.root
+      .findByProps({accessibilityLabel: 'Update profile photo'})
+      .props.onPress();
+  });
+  const options = alertSpy.mock.calls[0][2] as Array<{onPress?: () => void}>;
+  await act(async () => {
+    options[0].onPress?.();
+  });
+
+  expect(mockedLaunchCamera).not.toHaveBeenCalled();
+  expect(alertSpy).toHaveBeenLastCalledWith(
+    'Camera permission needed',
+    'Allow camera access in your device settings to take a profile photo.',
   );
   alertSpy.mockRestore();
 });
