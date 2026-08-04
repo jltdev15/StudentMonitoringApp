@@ -87,7 +87,7 @@ const activityIdsForSubmissionChange = (before, after) =>
 
 const activityCategoryForFeed = activity => {
   const category = String(activity?.activityCategory || '').trim().toLocaleLowerCase('en');
-  if (['peta', 'quiz', 'coding'].includes(category)) return category;
+  if (['peta', 'quiz', 'coding', 'lecture'].includes(category)) return category;
   if (activity?.quizData) return 'quiz';
   const searchable = `${activity?.title || ''} ${activity?.description || ''}`;
   if (/coding|programming|\bcode\b|website/i.test(searchable)) return 'coding';

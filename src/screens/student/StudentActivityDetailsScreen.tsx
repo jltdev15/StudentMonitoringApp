@@ -53,7 +53,7 @@ export const StudentActivityDetailsScreen = ({navigation, route}: Props) => {
     () => activityCategory(activity.title, activity.description, activity.activityCategory),
     [activity.activityCategory, activity.description, activity.title],
   );
-  const categoryStyle = categoryDetails[category];
+  const categoryStyle = categoryDetails[category] || categoryDetails.peta;
 
   const loadSubmission = useCallback(async () => {
     if (!studentId) {

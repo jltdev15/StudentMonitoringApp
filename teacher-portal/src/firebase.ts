@@ -1,6 +1,6 @@
 import {initializeApp} from 'firebase/app';
 import {getAuth} from 'firebase/auth';
-import {getFirestore} from 'firebase/firestore';
+import {initializeFirestore} from 'firebase/firestore';
 import {getStorage} from 'firebase/storage';
 import {getFunctions} from 'firebase/functions';
 
@@ -16,6 +16,8 @@ const config = {
 export const isFirebaseConfigured = Object.values(config).every(Boolean);
 export const app = initializeApp(config);
 export const auth = getAuth(app);
-export const db = getFirestore(app);
+// Auto-detect long polling when HTTP/3/WebChannel streaming is unreliable.
+// This keeps realtime listeners working on networks that produce QUIC timeout errors.
+export const db = initializeFirestore(app, {experimentalAutoDetectLongPolling: true});
 export const storage = getStorage(app);
 export const functions = getFunctions(app);

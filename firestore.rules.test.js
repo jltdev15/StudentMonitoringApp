@@ -35,6 +35,9 @@ test.beforeEach(async () => {
       setDoc(doc(database, 'classes', 'class-1'), {
         teacherId: 'teacher-user', status: 'active', className: 'Grade 11 ICT',
       }),
+      setDoc(doc(database, 'activities', 'quiz-1'), {
+        classId: 'class-1', status: 'active', activityCategory: 'quiz', quizData: {questions: []}, totalPoints: 25,
+      }),
       setDoc(doc(database, 'feedPosts', 'announcement_one'), {
         type: 'announcement', sourceId: 'one', title: 'Update', body: 'Welcome', likeCount: 0, commentCount: 0,
       }),
@@ -67,4 +70,43 @@ test('inactive students cannot read the global feed', async () => {
   });
   const database = environment.authenticatedContext('inactive-student').firestore();
   await assert.rejects(() => getDoc(doc(database, 'feedPosts', 'announcement_one')));
+});
+
+test('students can create one active quiz submission but cannot overwrite it', async () => {
+  const database = environment.authenticatedContext('student-user').firestore();
+  const submissionRef = doc(database, 'activitySubmissions', 'quiz-1_student-record');
+  const submission = {
+    activityId: 'quiz-1', classId: 'class-1', studentId: 'student-record', status: 'submitted',
+    score: 20, answers: {'0': 'A'}, remarks: 'Auto-graded Quiz', submittedAt: new Date(), updatedAt: new Date(), createdAt: new Date(),
+  };
+  await assertSucceeds(setDoc(submissionRef, submission));
+  await assertFails(setDoc(submissionRef, {...submission, score: 25}, {merge: true}));
+});
+
+test('students can transition their missing quiz placeholder to submitted exactly once', async () => {
+  await environment.withSecurityRulesDisabled(async context => {
+    await setDoc(doc(context.firestore(), 'activitySubmissions', 'quiz-1_student-record'), {
+      activityId: 'quiz-1', classId: 'class-1', studentId: 'student-record', status: 'missing',
+      score: null, remarks: '', createdAt: new Date(), updatedAt: new Date(),
+    });
+  });
+  const database = environment.authenticatedContext('student-user').firestore();
+  const submissionRef = doc(database, 'activitySubmissions', 'quiz-1_student-record');
+  await assertSucceeds(setDoc(submissionRef, {
+    status: 'submitted', score: 18, answers: {'0': 'B'}, remarks: 'Auto-graded Quiz', submittedAt: new Date(), updatedAt: new Date(),
+  }, {merge: true}));
+  await assertFails(setDoc(submissionRef, {score: 25, updatedAt: new Date()}, {merge: true}));
+});
+
+test('excused quiz placeholders remain locked for students', async () => {
+  await environment.withSecurityRulesDisabled(async context => {
+    await setDoc(doc(context.firestore(), 'activitySubmissions', 'quiz-1_student-record'), {
+      activityId: 'quiz-1', classId: 'class-1', studentId: 'student-record', status: 'excused',
+      score: null, remarks: 'Excused', createdAt: new Date(), updatedAt: new Date(),
+    });
+  });
+  const database = environment.authenticatedContext('student-user').firestore();
+  await assertFails(setDoc(doc(database, 'activitySubmissions', 'quiz-1_student-record'), {
+    status: 'submitted', score: 18, answers: {'0': 'B'}, remarks: 'Auto-graded Quiz', submittedAt: new Date(), updatedAt: new Date(),
+  }, {merge: true}));
 });

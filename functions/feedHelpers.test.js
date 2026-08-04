@@ -68,6 +68,7 @@ test('refreshes every activity affected by a submission change', () => {
 test('normalizes activity categories for achievement posts', () => {
   assert.equal(activityCategoryForFeed({activityCategory: 'quiz'}), 'quiz');
   assert.equal(activityCategoryForFeed({activityCategory: 'Coding'}), 'coding');
+  assert.equal(activityCategoryForFeed({activityCategory: 'lecture'}), 'lecture');
   assert.equal(activityCategoryForFeed({quizData: {questions: []}}), 'quiz');
   assert.equal(activityCategoryForFeed({title: 'First Summative Examination'}), 'quiz');
   assert.equal(activityCategoryForFeed({title: 'Build a website'}), 'coding');

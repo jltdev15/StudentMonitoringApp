@@ -20,7 +20,7 @@ vi.mock('../services/auth.service', () => ({getUserProfile: vi.fn(), createStude
 vi.mock('../services/classes.service', () => ({getClassesByIds: vi.fn(async () => []), getTeacherClasses: vi.fn(async () => []), saveClass: vi.fn()}));
 vi.mock('../services/students.service', () => ({archiveStudent: vi.fn(), claimRosterStudent: vi.fn(), findRosterStudent: vi.fn(), getStudentRecordByUserId: vi.fn(), getStudentsByClass: vi.fn(async () => []), saveStudent: vi.fn()}));
 vi.mock('../services/attendance.service', () => ({getAttendance: vi.fn(async () => []), getStudentAttendanceRecords: vi.fn(async () => []), saveAttendance: vi.fn()}));
-vi.mock('../services/activities.service', () => ({closeActivity: vi.fn(), getActivities: vi.fn(async () => []), getStudentActivities: vi.fn(async () => []), removeActivityMaterial: vi.fn(), saveActivity: vi.fn(), uploadActivityMaterials: vi.fn(async () => [])}));
+vi.mock('../services/activities.service', () => ({closeActivity: vi.fn(), getActivities: vi.fn(async () => []), getStudentActivities: vi.fn(async () => []), removeActivityMaterial: vi.fn(), reopenActivity: vi.fn(), saveActivity: vi.fn(), uploadActivityMaterials: vi.fn(async () => [])}));
 vi.mock('../services/announcements.service', () => ({getAnnouncements: vi.fn(async () => []), getStudentAnnouncements: vi.fn(async () => []), saveAnnouncement: vi.fn(), setAnnouncementFeatured: vi.fn()}));
 vi.mock('../services/submissions.service', () => ({getStudentSubmissions: vi.fn(async () => []), getSubmissions: vi.fn(async () => []), saveScores: vi.fn(), submitStudentQuiz: vi.fn()}));
 vi.mock('../services/administration.service', () => ({backfillStudentFeed: vi.fn(), resetTeacherData: vi.fn()}));

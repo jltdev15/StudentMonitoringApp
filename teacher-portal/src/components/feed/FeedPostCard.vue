@@ -78,6 +78,7 @@ const activityCategoryLabel = computed(() => {
   if (props.post.activityCategory === 'peta') return 'PETA';
   if (props.post.activityCategory === 'quiz') return 'Quiz';
   if (props.post.activityCategory === 'coding') return 'Coding';
+  if (props.post.activityCategory === 'lecture') return 'Lecture';
   const searchable = `${props.post.activityTitle || ''} ${props.post.body}`;
   if (/coding|programming|\bcode\b|website/i.test(searchable)) return 'Coding';
   if (/quiz|test|exam|summative/i.test(searchable)) return 'Quiz';

@@ -16,14 +16,14 @@ import {createStudentUserProfile, getUserProfile} from '../services/auth.service
 import {archiveClass, deleteClass, getClassesByIds, getTeacherClasses, saveClass} from '../services/classes.service';
 import {archiveStudent, claimRosterStudent, findRosterStudent, getStudentRecordByUserId, getStudentsByClass, MAX_PROFILE_PHOTO_BYTES, saveStudent, updateStudentProfile, uploadStudentProfilePhoto} from '../services/students.service';
 import {getAttendance, getStudentAttendanceRecords, saveAttendance} from '../services/attendance.service';
-import {closeActivity, getActivities, getStudentActivities, removeActivityMaterial, saveActivity, uploadActivityMaterials} from '../services/activities.service';
+import {closeActivity, getActivities, getStudentActivities, removeActivityMaterial, reopenActivity, saveActivity, uploadActivityMaterials} from '../services/activities.service';
 import {getAnnouncements, getStudentAnnouncements, saveAnnouncement, setAnnouncementFeatured} from '../services/announcements.service';
 import {getStudentSubmissions, getSubmissions, saveScores, submitStudentQuiz} from '../services/submissions.service';
 import {backfillStudentFeed, resetTeacherData} from '../services/administration.service';
 import type {ActivityCategory, ActivityMaterial, ActivityRecord, AnnouncementRecord, AttendanceRecord, AttendanceStatus, ClassRecord, QuizAnswer, QuizDocument, QuizQuestion, StudentRecord, SubmissionRecord, SubmissionStatus, UserProfile} from '../types';
 
 type View = 'dashboard' | 'feed' | 'classes' | 'students' | 'attendance' | 'activities' | 'announcements' | 'reports' | 'utilities' | 'profile' | 'take-quiz' | 'review-quiz';
-type Modal = 'class' | 'class-action' | 'student' | 'edit-profile' | 'profile-photo' | 'activity' | 'announcement' | 'scores' | 'reset' | 'answer-key' | 'logout' | 'confirm-next-question' | 'submit-quiz' | 'exit-quiz' | 'remove-material' | null;
+type Modal = 'class' | 'class-action' | 'student' | 'edit-profile' | 'profile-photo' | 'activity' | 'announcement' | 'scores' | 'reopen-activity' | 'reset' | 'answer-key' | 'logout' | 'confirm-next-question' | 'submit-quiz' | 'exit-quiz' | 'remove-material' | null;
 
 const route = useRoute();
 const router = useRouter();
@@ -65,9 +65,17 @@ const submissions = ref<Record<string, {status: SubmissionStatus; score: number 
 const attendanceDate = ref(new Date().toISOString().slice(0, 10));
 const selectedActivity = ref<ActivityRecord | null>(null);
 const selectedAnswerKey = ref<ActivityRecord | null>(null);
+const pendingReopenActivity = ref<ActivityRecord | null>(null);
+const reopenDueDate = ref('');
+const reopenStudentCounts = reactive({eligible: 0, locked: 0});
 const pendingMaterialRemoval = ref<{activity: ActivityRecord; material: ActivityMaterial; kind: 'material' | 'peta-output'} | null>(null);
 const resetConfirmation = ref('');
 const attendanceStatuses: AttendanceStatus[] = ['present', 'late', 'absent', 'excused'];
+const minimumReopenDueDate = computed(() => {
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  return `${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(2, '0')}-${String(tomorrow.getDate()).padStart(2, '0')}`;
+});
 const studentScoreViewingEnabled = false;
 const navItems = computed(() => {
   if (profile.value?.role === 'student') {
@@ -234,7 +242,7 @@ function isoDate(value: ActivityRecord['dueDate']) {
 }
 function activityCategoryLabel(activity: ActivityRecord) {
   const category = activity.activityCategory || (/quiz/i.test(`${activity.title} ${activity.description}`) ? 'quiz' : 'peta');
-  return category === 'coding' ? 'Coding' : category === 'quiz' ? 'Quiz' : 'PETA';
+  return category === 'coding' ? 'Coding' : category === 'quiz' ? 'Quiz' : category === 'lecture' ? 'Lecture' : 'PETA';
 }
 
 async function loadClasses() {
@@ -556,6 +564,9 @@ function closeModal() {
   if (modal.value === 'activity' && convertingImages.value) return;
   modal.value = null;
   selectedActivity.value = null;
+  pendingReopenActivity.value = null;
+  reopenDueDate.value = '';
+  Object.assign(reopenStudentCounts, {eligible: 0, locked: 0});
   pendingMaterialRemoval.value = null;
   pendingClassAction.value = null;
   classActionConfirmation.value = '';
@@ -669,16 +680,26 @@ async function handleMaterialFiles(event: Event) {
   const input = event.target as HTMLInputElement;
   const files = Array.from(input.files || []);
   input.value = '';
-  const invalid = files.find(file => !file.type.startsWith('image/') && file.type !== 'text/html' && !/\.html?$/i.test(file.name));
+  const lecture = activityForm.activityCategory === 'lecture';
+  const invalid = files.find(file => lecture
+    ? !file.type.startsWith('image/')
+    : !file.type.startsWith('image/') && file.type !== 'text/html' && !/\.html?$/i.test(file.name));
   const tooLarge = files.find(file => file.size > 10 * 1024 * 1024);
-  const totalCount = activityForm.existingMaterials.length + activityForm.materialFiles.length + files.length;
+  const existingCount = lecture
+    ? activityForm.existingMaterials.filter(material => materialKind(material) === 'Image').length
+    : activityForm.existingMaterials.length;
+  const totalCount = existingCount + activityForm.materialFiles.length + files.length;
 
   if (invalid) {
-    activityForm.materialFileError = `${invalid.name} is not an image or HTML file.`;
+    activityForm.materialFileError = lecture
+      ? `${invalid.name} is not an image file.`
+      : `${invalid.name} is not an image or HTML file.`;
   } else if (tooLarge) {
     activityForm.materialFileError = `${tooLarge.name} is larger than 10 MB.`;
   } else if (totalCount > 10) {
-    activityForm.materialFileError = 'You can attach up to 10 materials to one activity.';
+    activityForm.materialFileError = lecture
+      ? 'You can attach up to 10 lecture pictures.'
+      : 'You can attach up to 10 materials to one activity.';
   } else {
     imageConversionsInProgress.value += 1;
     try {
@@ -728,13 +749,23 @@ function removePendingPetaOutput(index: number) {
 function materialKind(material: ActivityMaterial) {
   return material.contentType === 'text/html' || /\.html?$/i.test(material.fileName) ? 'HTML' : 'Image';
 }
+function lectureImagesFor(activity: ActivityRecord) {
+  return activity.activityCategory === 'lecture'
+    ? (activity.materials || []).filter(material => materialKind(material) === 'Image')
+    : [];
+}
+function learningResourcesFor(activity: ActivityRecord) {
+  return activity.activityCategory === 'lecture'
+    ? (activity.materials || []).filter(material => materialKind(material) !== 'Image')
+    : activity.materials || [];
+}
 function petaOutputsFor(activity: ActivityRecord) {
   return activity.petaOutputs || (activity.petaOutput ? [activity.petaOutput] : []);
 }
 function formatFileSize(size: number) {
   return size < 1024 * 1024 ? `${Math.max(1, Math.round(size / 1024))} KB` : `${(size / (1024 * 1024)).toFixed(1)} MB`;
 }
-async function downloadAttachment(material: ActivityMaterial, prefix: 'PETA' | 'RES', index: number) {
+async function downloadAttachment(material: ActivityMaterial, prefix: 'PETA' | 'RES' | 'LEC', index: number) {
   if (downloadingMaterialId.value) return;
   downloadingMaterialId.value = material.id;
   try {
@@ -849,6 +880,19 @@ async function submitActivity() {
     showError(activityForm.materialFileError);
     return;
   }
+  if (activityForm.activityCategory === 'lecture') {
+    const pendingNonImages = activityForm.materialFiles.filter(file => !file.type.startsWith('image/'));
+    if (pendingNonImages.length) {
+      showError('Lecture attachments can only include pictures. Remove the pending non-image file before saving.');
+      return;
+    }
+    const imageCount = activityForm.existingMaterials.filter(material => materialKind(material) === 'Image').length
+      + activityForm.materialFiles.filter(file => file.type.startsWith('image/')).length;
+    if (!imageCount) {
+      showError('Please attach at least one picture for this lecture.');
+      return;
+    }
+  }
   if (activityForm.petaOutputError) {
     showError(activityForm.petaOutputError);
     return;
@@ -944,6 +988,42 @@ async function submitScores() {
 }
 async function archive(id: string) { if (window.confirm('Archive this student? They will no longer appear in active class lists.')) { busy.value = true; try { await archiveStudent(id); await loadClassData(); showMessage('Student archived.'); } catch (value) { showError(value); } finally { busy.value = false; } } }
 async function close(id: string) { if (window.confirm('Close this activity? Students will no longer be able to submit it.')) { busy.value = true; try { await closeActivity(id); await loadClassData(); showMessage('Activity closed.'); } catch (value) { showError(value); } finally { busy.value = false; } } }
+async function requestActivityReopen(activity: ActivityRecord) {
+  if (activity.status !== 'closed' || !activity.quizData) return;
+  resetAlerts();
+  busy.value = true;
+  try {
+    const current = await getSubmissions(activity.id);
+    const byStudent = new Map(current.map(item => [item.studentId, item]));
+    const eligible = students.value.filter(student => {
+      const submission = byStudent.get(student.id);
+      return !submission || submission.status === 'missing';
+    }).length;
+    pendingReopenActivity.value = activity;
+    reopenDueDate.value = minimumReopenDueDate.value;
+    Object.assign(reopenStudentCounts, {eligible, locked: Math.max(0, students.value.length - eligible)});
+    modal.value = 'reopen-activity';
+  } catch (value) {
+    showError(value);
+  } finally {
+    busy.value = false;
+  }
+}
+async function confirmActivityReopen() {
+  if (!pendingReopenActivity.value || reopenDueDate.value < minimumReopenDueDate.value) return;
+  busy.value = true;
+  try {
+    const dueDate = new Date(`${reopenDueDate.value}T23:59:59`);
+    await reopenActivity(pendingReopenActivity.value.id, dueDate);
+    await loadClassData();
+    closeModal();
+    showMessage('Quiz reopened for students who have not completed it.');
+  } catch (value) {
+    showError(value);
+  } finally {
+    busy.value = false;
+  }
+}
 async function toggleFeatured(announcementId: string, featured: boolean) {
   busy.value = true;
   try {
@@ -977,7 +1057,27 @@ async function runFeedBackfill() {
   }
 }
 
+function studentSubmissionFor(activityId: string) {
+  return mySubmissions.value.find(item => item.activityId === activityId);
+}
+
+function isCompletedStudentSubmission(activityId: string) {
+  const submission = studentSubmissionFor(activityId);
+  return !!submission && submission.status !== 'missing';
+}
+
+function canTakeStudentQuiz(activity: ActivityRecord) {
+  const submission = studentSubmissionFor(activity.id);
+  return !!activity.quizData && activity.status === 'active' && (!submission || submission.status === 'missing');
+}
+
 function startQuiz(activity: ActivityRecord) {
+  if (!canTakeStudentQuiz(activity)) {
+    showMessage(activity.status !== 'active'
+      ? 'This test is not currently open.'
+      : 'This test has already been completed and cannot be retaken.');
+    return;
+  }
   closeMobileMenu(false);
   takingQuiz.value = activity;
   quizAnswers.value = {};
@@ -1123,7 +1223,16 @@ watch([() => route.params.activityId, myActivities, mySubmissions], ([activityId
   const activity = myActivities.value.find(item => item.id === activityId);
   if (!activity) return;
   const existingSubmission = mySubmissions.value.find(item => item.activityId === activityId);
-  if (route.name === 'student-take-quiz' && existingSubmission && !quizSubmitted.value) {
+  if (route.name === 'student-take-quiz' && activity.status !== 'active') {
+    takingQuiz.value = null;
+    quizAnswers.value = {};
+    quizQuestionError.value = '';
+    resetQuizQuestionFlow();
+    router.replace('/student/activities');
+    showMessage('This test is not currently open.');
+    return;
+  }
+  if (route.name === 'student-take-quiz' && existingSubmission?.status !== undefined && existingSubmission.status !== 'missing' && !quizSubmitted.value) {
     takingQuiz.value = null;
     quizAnswers.value = {};
     quizQuestionError.value = '';
@@ -1225,6 +1334,12 @@ function getOptionClass(q: QuizQuestion, i: number | string, oIndex: number | st
             <div><span :class="['tag', item.status]">{{ item.status }}</span><span class="tag">{{ activityCategoryLabel(item) }}</span><span v-if="item.quizData" class="tag" style="background: #eef4ff; color: #2563eb;">JSON Quiz</span><span class="points">{{ item.totalPoints }} points</span></div>
             <h3>{{ item.title }}</h3><p>{{ item.description || 'No description provided.' }}</p>
             <div v-if="petaOutputsFor(item).length || item.materials?.length" class="activity-assets">
+              <section v-if="lectureImagesFor(item).length" class="lecture-gallery" :aria-label="`Lecture pictures for ${item.title}`">
+                <figure v-for="(picture, pictureIndex) in lectureImagesFor(item)" :key="picture.id" class="lecture-picture">
+                  <img :src="picture.downloadUrl" :alt="`Lecture picture ${pictureIndex + 1} for ${item.title}`" loading="lazy" />
+                  <figcaption><span>Picture {{ pictureIndex + 1 }}</span><div><button type="button" class="lecture-download" :disabled="downloadingMaterialId !== null" :aria-label="`Download lecture picture ${pictureIndex + 1}`" @click="downloadAttachment(picture, 'LEC', pictureIndex)">↓</button><button type="button" class="asset-remove" :disabled="busy" :aria-label="`Remove ${picture.fileName}`" @click="requestAttachedFileRemoval(item, picture, 'material')">×</button></div></figcaption>
+                </figure>
+              </section>
               <details v-if="petaOutputsFor(item).length" class="asset-group output-group">
                 <summary><span class="asset-summary-icon" aria-hidden="true">▧</span><span><strong>PETA output examples</strong><small>Reference images</small></span><b>{{ petaOutputsFor(item).length }}</b></summary>
                 <div class="asset-downloads teacher-asset-downloads">
@@ -1234,17 +1349,17 @@ function getOptionClass(q: QuizQuestion, i: number | string, oIndex: number | st
                   </div>
                 </div>
               </details>
-              <details v-if="item.materials?.length" class="asset-group resource-group">
-                <summary><span class="asset-summary-icon" aria-hidden="true">▤</span><span><strong>Learning resources</strong><small>Images and HTML files</small></span><b>{{ item.materials.length }}</b></summary>
+              <details v-if="learningResourcesFor(item).length" class="asset-group resource-group">
+                <summary><span class="asset-summary-icon" aria-hidden="true">▤</span><span><strong>Learning resources</strong><small>{{ item.activityCategory === 'lecture' ? 'Legacy attached files' : 'Images and HTML files' }}</small></span><b>{{ learningResourcesFor(item).length }}</b></summary>
                 <div class="asset-downloads teacher-asset-downloads">
-                  <div v-for="(material, materialIndex) in item.materials" :key="material.id" class="asset-download-row">
+                  <div v-for="(material, materialIndex) in learningResourcesFor(item)" :key="material.id" class="asset-download-row">
                     <button type="button" class="asset-download-button" :disabled="downloadingMaterialId !== null" :title="material.fileName" :aria-label="`Download ${material.fileName} as ${shortDownloadName('RES', materialIndex)}`" @click="downloadAttachment(material, 'RES', materialIndex)"><span aria-hidden="true">{{ downloadingMaterialId === material.id ? '…' : materialKind(material) === 'HTML' ? '⌘' : '↓' }}</span><span>{{ shortDownloadName('RES', materialIndex) }}</span></button>
                     <button type="button" class="asset-remove" :disabled="busy" :aria-label="`Remove ${material.fileName}`" title="Remove attached file" @click="requestAttachedFileRemoval(item, material, 'material')">×</button>
                   </div>
                 </div>
               </details>
             </div>
-            <footer><span>Due {{ isoDate(item.dueDate) }}</span><div><button class="text-button" @click="openEditActivity(item)">Edit</button><button class="text-button" @click="openScores(item)">Scores</button><button v-if="item.quizData" class="text-button" @click="selectedAnswerKey = item; modal = 'answer-key'">Answer Key</button><button v-if="item.status === 'active'" class="text-button danger" @click="close(item.id)">Close</button></div></footer>
+            <footer><span>Due {{ isoDate(item.dueDate) }}</span><div><button class="text-button" @click="openEditActivity(item)">Edit</button><button class="text-button" @click="openScores(item)">Scores</button><button v-if="item.quizData" class="text-button" @click="selectedAnswerKey = item; modal = 'answer-key'">Answer Key</button><button v-if="item.status === 'closed' && item.quizData" class="text-button" @click="requestActivityReopen(item)">Reopen</button><button v-if="item.status === 'active'" class="text-button danger" @click="close(item.id)">Close</button></div></footer>
           </article>
         </div>
         <div v-else class="empty-state"><b>◈</b><h3>No activities yet</h3><p>Create an activity to share it with students and begin recording scores.</p></div>
@@ -1302,24 +1417,30 @@ function getOptionClass(q: QuizQuestion, i: number | string, oIndex: number | st
               </div>
               <h3>{{ item.title }}</h3><p>{{ item.description || 'No description provided.' }}</p>
               <div v-if="petaOutputsFor(item).length || item.materials?.length" class="activity-assets">
+                <section v-if="lectureImagesFor(item).length" class="lecture-gallery student-lecture-gallery" :aria-label="`Lecture pictures for ${item.title}`">
+                  <figure v-for="(picture, pictureIndex) in lectureImagesFor(item)" :key="picture.id" class="lecture-picture">
+                    <img :src="picture.downloadUrl" :alt="`Lecture picture ${pictureIndex + 1} for ${item.title}`" loading="lazy" />
+                    <figcaption><span>Picture {{ pictureIndex + 1 }}</span><button type="button" class="lecture-download" :disabled="downloadingMaterialId !== null" :aria-label="`Download lecture picture ${pictureIndex + 1}`" @click="downloadAttachment(picture, 'LEC', pictureIndex)">↓ Download</button></figcaption>
+                  </figure>
+                </section>
                 <details v-if="petaOutputsFor(item).length" class="asset-group output-group">
                   <summary><span class="asset-summary-icon" aria-hidden="true">▧</span><span><strong>PETA output examples</strong><small>One-click downloads</small></span><b>{{ petaOutputsFor(item).length }}</b></summary>
                   <div class="asset-downloads">
                     <button v-for="(output, outputIndex) in petaOutputsFor(item)" :key="output.id" type="button" class="asset-download-button" :disabled="downloadingMaterialId !== null" :title="output.fileName" :aria-label="`Download ${output.fileName} as ${shortDownloadName('PETA', outputIndex)}`" @click="downloadAttachment(output, 'PETA', outputIndex)"><span aria-hidden="true">{{ downloadingMaterialId === output.id ? '…' : '↓' }}</span><span>{{ shortDownloadName('PETA', outputIndex) }}</span></button>
                   </div>
                 </details>
-                <details v-if="item.materials?.length" class="asset-group resource-group">
-                  <summary><span class="asset-summary-icon" aria-hidden="true">▤</span><span><strong>Learning resources</strong><small>One-click downloads</small></span><b>{{ item.materials.length }}</b></summary>
+                <details v-if="learningResourcesFor(item).length" class="asset-group resource-group">
+                  <summary><span class="asset-summary-icon" aria-hidden="true">▤</span><span><strong>Learning resources</strong><small>One-click downloads</small></span><b>{{ learningResourcesFor(item).length }}</b></summary>
                   <div class="asset-downloads">
-                    <button v-for="(material, materialIndex) in item.materials" :key="material.id" type="button" class="asset-download-button" :disabled="downloadingMaterialId !== null" :title="material.fileName" :aria-label="`Download ${material.fileName} as ${shortDownloadName('RES', materialIndex)}`" @click="downloadAttachment(material, 'RES', materialIndex)"><span aria-hidden="true">{{ downloadingMaterialId === material.id ? '…' : materialKind(material) === 'HTML' ? '⌘' : '↓' }}</span><span>{{ shortDownloadName('RES', materialIndex) }}</span></button>
+                    <button v-for="(material, materialIndex) in learningResourcesFor(item)" :key="material.id" type="button" class="asset-download-button" :disabled="downloadingMaterialId !== null" :title="material.fileName" :aria-label="`Download ${material.fileName} as ${shortDownloadName('RES', materialIndex)}`" @click="downloadAttachment(material, 'RES', materialIndex)"><span aria-hidden="true">{{ downloadingMaterialId === material.id ? '…' : materialKind(material) === 'HTML' ? '⌘' : '↓' }}</span><span>{{ shortDownloadName('RES', materialIndex) }}</span></button>
                   </div>
                 </details>
               </div>
               <footer>
                 <span>Due {{ isoDate(item.dueDate) }}</span>
                 <div v-if="mySubmissions.find(s => s.activityId === item.id)?.remarks">Remarks: {{ mySubmissions.find(s => s.activityId === item.id)?.remarks }}</div>
-                <button v-if="studentScoreViewingEnabled && item.quizData && mySubmissions.find(s => s.activityId === item.id)" class="secondary small" style="margin-left: auto; padding: 4px 12px; font-size: 13px;" @click="reviewStudentQuiz(item)">View Results</button>
-                <button v-else-if="item.quizData && item.status === 'active' && !mySubmissions.find(s => s.activityId === item.id)" class="primary small" style="margin-left: auto; padding: 4px 12px; font-size: 13px;" @click="startQuiz(item)">Take the Test</button>
+                <button v-if="studentScoreViewingEnabled && item.quizData && isCompletedStudentSubmission(item.id)" class="secondary small" style="margin-left: auto; padding: 4px 12px; font-size: 13px;" @click="reviewStudentQuiz(item)">View Results</button>
+                <button v-else-if="canTakeStudentQuiz(item)" class="primary small" style="margin-left: auto; padding: 4px 12px; font-size: 13px;" @click="startQuiz(item)">Take the Test</button>
               </footer>
             </article>
           </div>
@@ -1498,7 +1619,7 @@ function getOptionClass(q: QuizQuestion, i: number | string, oIndex: number | st
         <section class="activity-details-column">
           <div class="activity-column-heading"><span aria-hidden="true">✎</span><div><strong>Activity details</strong><small>Instructions, schedule, and grading</small></div></div>
           <label>Title<input v-model="activityForm.title" required placeholder="e.g. Web design quiz" /></label>
-          <label>Category<select v-model="activityForm.activityCategory"><option value="peta">PETA</option><option value="quiz">Quiz</option><option value="coding">Coding</option></select></label>
+          <label>Category<select v-model="activityForm.activityCategory"><option value="peta">PETA</option><option value="quiz">Quiz</option><option value="coding">Coding</option><option value="lecture">Lecture</option></select></label>
           <label>Description<textarea v-model="activityForm.description" placeholder="Instructions for students"></textarea></label>
           <div v-if="activityForm.activityCategory === 'quiz'" class="quiz-file-upload"><label>Quiz JSON file <small v-if="activityForm.quizData">(Optional if keeping existing JSON)</small><input type="file" accept=".json,application/json" @change="handleQuizFileUpload" :required="!activityForm.quizData" /></label><p v-if="activityForm.quizFileName" class="file-success">✓ {{ activityForm.quizFileName }}</p><p v-if="activityForm.quizFileError" class="alert error">{{ activityForm.quizFileError }}</p></div>
           <div class="form-grid"><label>Due date<input v-model="activityForm.dueDate" type="date" /></label><label>Total points<input v-model.number="activityForm.totalPoints" required min="1" type="number" /></label></div>
@@ -1511,9 +1632,9 @@ function getOptionClass(q: QuizQuestion, i: number | string, oIndex: number | st
             <div v-if="activityForm.existingPetaOutputs.length || activityForm.petaOutputFiles.length" class="material-file-list"><div v-for="output in activityForm.existingPetaOutputs" :key="output.id" class="material-file"><span class="material-file-icon">▧</span><div><strong>{{ output.fileName }}</strong><small>Image · {{ formatFileSize(output.size) }}</small></div><span class="material-saved">Saved</span></div><div v-for="(file, index) in activityForm.petaOutputFiles" :key="`${file.name}-${file.lastModified}`" class="material-file"><span class="material-file-icon">▧</span><div><strong>{{ file.name }}</strong><small>Image · {{ formatFileSize(file.size) }}</small></div><button type="button" class="material-remove" :aria-label="`Remove ${file.name}`" @click="removePendingPetaOutput(index)">×</button></div></div>
             <p v-if="activityForm.petaOutputError" class="material-error">{{ activityForm.petaOutputError }}</p>
           </section>
-          <section class="material-upload">
-            <div><strong>Learning materials</strong><small>Upload images or HTML files for students. Images are automatically optimized to WebP.</small></div>
-            <label class="material-picker"><input type="file" accept="image/*,.html,.htm,text/html" multiple @change="handleMaterialFiles" /><span aria-hidden="true">＋</span>Choose files</label>
+          <section class="material-upload" :class="{'lecture-material-upload': activityForm.activityCategory === 'lecture'}">
+            <div><strong>{{ activityForm.activityCategory === 'lecture' ? 'Lecture pictures' : 'Learning materials' }}</strong><small>{{ activityForm.activityCategory === 'lecture' ? 'Upload the pictures students need for this lecture. At least one image is required and all images are optimized to WebP.' : 'Upload images or HTML files for students. Images are automatically optimized to WebP.' }}</small></div>
+            <label class="material-picker"><input type="file" :accept="activityForm.activityCategory === 'lecture' ? 'image/*' : 'image/*,.html,.htm,text/html'" multiple @change="handleMaterialFiles" /><span aria-hidden="true">＋</span>{{ activityForm.activityCategory === 'lecture' ? 'Choose pictures' : 'Choose files' }}</label>
             <div v-if="activityForm.existingMaterials.length || activityForm.materialFiles.length" class="material-file-list"><div v-for="material in activityForm.existingMaterials" :key="material.id" class="material-file"><span class="material-file-icon">{{ materialKind(material) === 'HTML' ? '⌘' : '▧' }}</span><div><strong>{{ material.fileName }}</strong><small>{{ materialKind(material) }} · {{ formatFileSize(material.size) }}</small></div><span class="material-saved">Saved</span></div><div v-for="(file, index) in activityForm.materialFiles" :key="`${file.name}-${file.lastModified}`" class="material-file"><span class="material-file-icon">{{ /\.html?$/i.test(file.name) ? '⌘' : '▧' }}</span><div><strong>{{ file.name }}</strong><small>{{ /\.html?$/i.test(file.name) ? 'HTML' : 'Image' }} · {{ formatFileSize(file.size) }}</small></div><button type="button" class="material-remove" :aria-label="`Remove ${file.name}`" @click="removePendingMaterial(index)">×</button></div></div>
             <p v-if="activityForm.materialFileError" class="material-error">{{ activityForm.materialFileError }}</p>
           </section>
@@ -1524,6 +1645,7 @@ function getOptionClass(q: QuizQuestion, i: number | string, oIndex: number | st
     <form v-else-if="modal === 'announcement'" class="modal-card" @submit.prevent="submitAnnouncement"><div class="modal-title"><div><p class="eyebrow">ANNOUNCEMENT</p><h2>Share an update</h2></div><button type="button" class="icon-button" @click="closeModal">×</button></div><label>Title<input v-model="announcementForm.title" required /></label><label>Message<textarea v-model="announcementForm.message" required placeholder="What do students need to know?"></textarea></label><div class="form-grid"><label>Type<select v-model="announcementForm.announcementType"><option value="General">General</option><option value="Academic">Academic</option><option value="Events">Events</option></select></label><label>Audience<select v-model="announcementForm.targetRole"><option value="students">Students</option><option value="all">Everyone</option><option value="teachers">Teachers</option></select></label></div><label>Class <small>(optional)</small><select v-model="announcementForm.classId"><option value="">All classes</option><option v-for="item in classes" :key="item.id" :value="item.id">{{ item.className }} · {{ item.section }}</option></select></label><div class="modal-actions"><button type="button" class="secondary" @click="closeModal">Cancel</button><button class="primary" :disabled="busy">Publish announcement</button></div></form>
     <form v-else-if="modal === 'scores' && selectedActivity" class="modal-card wide score-modal" @submit.prevent="submitScores"><div class="modal-title"><div><p class="eyebrow">SCORE ENCODING & RESULTS</p><h2>{{ selectedActivity.title }}</h2><p>{{ selectedActivity.totalPoints }} points possible · <strong>{{ Object.values(submissions).filter(s => s.status === 'submitted' || s.status === 'late').length }} of {{ students.length }}</strong> students completed</p></div><button type="button" class="icon-button" @click="closeModal">×</button></div><div class="score-list"><div v-for="student in students" :key="student.id" class="score-row"><div><strong>{{ student.fullName }}</strong><small>{{ student.studentNumber }}</small></div><select v-model="submissions[student.id].status"><option value="submitted">Submitted</option><option value="late">Late</option><option value="missing">Missing</option><option value="excused">Excused</option></select><input v-model.number="submissions[student.id].score" type="number" min="0" :max="selectedActivity.totalPoints" placeholder="Score" /><input v-model="submissions[student.id].remarks" placeholder="Remarks" /></div></div><div class="modal-actions"><button type="button" class="secondary" @click="closeModal">Cancel</button><button class="primary" :disabled="busy">Save scores</button></div></form>
 
+    <form v-else-if="modal === 'reopen-activity' && pendingReopenActivity" class="modal-card reopen-activity-modal" @submit.prevent="confirmActivityReopen"><div class="modal-title"><div><p class="eyebrow">REOPEN QUIZ</p><h2>Give missing students another chance?</h2></div><button type="button" class="icon-button" aria-label="Close reopen quiz dialog" :disabled="busy" @click="closeModal">×</button></div><p><strong>{{ pendingReopenActivity.title }}</strong> will become active again. Existing completed, late, early-exit, and excused submissions remain locked and will not be changed.</p><div class="quiz-reopen-summary" aria-label="Quiz reopen eligibility"><div><strong>{{ reopenStudentCounts.eligible }}</strong><span>Eligible students</span></div><div><strong>{{ reopenStudentCounts.locked }}</strong><span>Permanently locked</span></div></div><label>New due date<input v-model="reopenDueDate" type="date" :min="minimumReopenDueDate" required /><small>Choose tomorrow or a later date.</small></label><div class="modal-actions"><button type="button" class="secondary" :disabled="busy" @click="closeModal">Keep closed</button><button class="primary" :disabled="busy || reopenDueDate < minimumReopenDueDate">{{ busy ? 'Reopening…' : 'Reopen quiz' }}</button></div></form>
     <form v-else-if="modal === 'reset'" class="modal-card reset-modal" @submit.prevent="resetData"><div class="modal-title"><div><p class="eyebrow">PERMANENT ACTION</p><h2>Reset your teaching data</h2></div><button type="button" class="icon-button" @click="closeModal">×</button></div><p>This will permanently delete your attendance, activities, activity submissions, and announcements across every class you manage. Classes and student rosters are not affected.</p><label>Type <strong>RESET</strong> to continue<input v-model="resetConfirmation" autocomplete="off" placeholder="RESET" /></label><div class="modal-actions"><button type="button" class="secondary" @click="closeModal">Cancel</button><button class="danger-button" :disabled="resetConfirmation !== 'RESET' || busy">{{ busy ? 'Resetting…' : 'Permanently reset data' }}</button></div></form>
     
     <div v-else-if="modal === 'answer-key' && selectedAnswerKey" class="modal-card wide">

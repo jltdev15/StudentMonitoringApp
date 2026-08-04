@@ -2,7 +2,7 @@ import type {Timestamp} from 'firebase/firestore';
 
 export type AttendanceStatus = 'present' | 'absent' | 'late' | 'excused';
 export type SubmissionStatus = 'submitted' | 'missing' | 'late' | 'excused';
-export type ActivityCategory = 'peta' | 'quiz' | 'coding';
+export type ActivityCategory = 'peta' | 'quiz' | 'coding' | 'lecture';
 export type QuizAnswer = string | number | boolean | null;
 export type QuizOptions = QuizAnswer[] | Record<string, QuizAnswer>;
 export type QuizQuestion = {
@@ -94,6 +94,7 @@ export type ActivityRecord = {
   petaOutput?: ActivityMaterial | null;
   status: 'active' | 'closed';
   closedAt?: Timestamp | Date | null;
+  reopenedAt?: Timestamp | Date | null;
 };
 
 export type FeedPostType = 'achievement' | 'attendance' | 'announcement' | 'student';

@@ -85,6 +85,15 @@ describe('FeedPostCard', () => {
     expect(rows[3].classes()).toContain('tier-bronze');
   });
 
+  it('labels Lecture achievement posts without falling back to PETA', () => {
+    const wrapper = mount(FeedPostCard, {
+      props: {post: {...achievement, activityCategory: 'lecture'}, studentUserId: 'student-user'},
+    });
+
+    expect(wrapper.text()).toContain('Lecture');
+    expect(wrapper.text()).not.toContain('PETA');
+  });
+
   it('toggles a like and offers only approved comments', async () => {
     const wrapper = mount(FeedPostCard, {props: {post: achievement, studentUserId: 'student-user'}});
     const actions = wrapper.findAll('.feed-post-actions button');

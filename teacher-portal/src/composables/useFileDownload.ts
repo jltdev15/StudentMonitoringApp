@@ -1,6 +1,6 @@
 import type {ActivityMaterial} from '../types';
 
-export function shortDownloadName(prefix: 'PETA' | 'RES', index: number) {
+export function shortDownloadName(prefix: 'PETA' | 'RES' | 'LEC', index: number) {
   return `${prefix}-${String(index + 1).padStart(2, '0')}`;
 }
 

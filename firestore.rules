@@ -107,6 +107,23 @@ service cloud.firestore {
         && request.resource.data.status in ['submitted', 'late'];
     }
 
+    function isMissingQuizSubmissionTransition() {
+      return resource.data.status == 'missing'
+        && request.resource.data.activityId == resource.data.activityId
+        && request.resource.data.classId == resource.data.classId
+        && request.resource.data.studentId == resource.data.studentId
+        && isStudentQuizSubmission()
+        && request.resource.data.status == 'submitted'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status',
+          'score',
+          'answers',
+          'remarks',
+          'submittedAt',
+          'updatedAt'
+        ]);
+    }
+
     match /users/{userId} {
       allow read: if signedIn() && (
         userId == request.auth.uid
@@ -193,7 +210,8 @@ service cloud.firestore {
           && resource.data.score == null
           && request.resource.data.diff(resource.data).affectedKeys()
             .hasOnly(['attachments', 'status', 'submittedAt', 'updatedAt'])
-        );
+        )
+        || isMissingQuizSubmissionTransition();
       allow delete: if ownsClass(resource.data.classId);
     }
 
