@@ -32,7 +32,7 @@ export const useStudentWorkspaceStore = defineStore('studentWorkspace', {
         const activeClassIds = this.classes.map(item => item.id);
         [this.activities, this.submissions, this.attendance, this.announcements] = await Promise.all([
           getStudentActivities(activeClassIds),
-          getStudentSubmissions(this.student.id),
+          getStudentSubmissions(this.student.id, activeClassIds),
           getStudentAttendanceRecords(this.student.id),
           getStudentAnnouncements(activeClassIds),
         ]);

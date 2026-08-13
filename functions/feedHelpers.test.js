@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const {activityCategoryForFeed, activityIdsForSubmissionChange, COMMENT_LABELS, isScheduledDate, passingSubmissions, publicStudentName, rankedAchievers, studentFeedProfileChange, STUDENT_POST_PRESETS} = require('./feedHelpers');
+const {activityCategoryForFeed, activityIdsForSubmissionChange, COMMENT_LABELS, isScheduledDate, passingSubmissions, publicStudentName, rankedAchievers, studentFeedProfileChange, STUDENT_POST_PRESETS, validateTeacherPost} = require('./feedHelpers');
 
 test('creates a limited public student name', () => {
   assert.equal(publicStudentName('DELA CRUZ, JUAN L.'), 'Juan D.');
@@ -95,4 +95,12 @@ test('detects profile photos that must be synchronized to student posts', () => 
     null,
   );
   assert.equal(studentFeedProfileChange({}, {photoUrl: 'photo.webp'}), null);
+});
+
+test('validates and normalizes teacher feed posts', () => {
+  assert.deepEqual(validateTeacherPost('  Classes resume tomorrow.  '), {
+    title: '', message: 'Classes resume tomorrow.', error: '',
+  });
+  assert.equal(validateTeacherPost('').error, 'Enter a message.');
+  assert.match(validateTeacherPost('x'.repeat(1001)).error, /1,000 characters/);
 });

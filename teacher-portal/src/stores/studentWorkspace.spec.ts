@@ -1,5 +1,8 @@
 import {createPinia, setActivePinia} from 'pinia';
-import {beforeEach, vi} from 'vitest';
+import {beforeEach, expect, it, vi} from 'vitest';
+import {getClassesByIds} from '../services/classes.service';
+import {getStudentRecordByUserId} from '../services/students.service';
+import {getStudentSubmissions} from '../services/submissions.service';
 import {useStudentWorkspaceStore} from './studentWorkspace';
 
 vi.mock('../services/students.service', () => ({getStudentRecordByUserId: vi.fn(async () => null)}));
@@ -17,5 +20,15 @@ describe('student workspace store', () => {
     expect(store.student).toBeNull();
     expect(store.activities).toEqual([]);
     expect(store.loading).toBe(false);
+  });
+
+  it('loads submissions only within the student’s enrolled classes', async () => {
+    vi.mocked(getStudentRecordByUserId).mockResolvedValue({id: 'student-1', classIds: ['class-1']} as never);
+    vi.mocked(getClassesByIds).mockResolvedValue([{id: 'class-1'}] as never);
+    const store = useStudentWorkspaceStore();
+
+    await store.load('user-1');
+
+    expect(getStudentSubmissions).toHaveBeenCalledWith('student-1', ['class-1']);
   });
 });

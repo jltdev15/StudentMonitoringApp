@@ -89,8 +89,14 @@ service cloud.firestore {
         && request.resource.data.classId == activityForSubmission().classId
         && activityForSubmission().status == 'active'
         && activityForSubmission().acceptsImageAttachments == true
-        && request.resource.data.classId in currentUser().classIds
+        && activityForSubmission().get('activityCategory', 'peta') != 'quiz'
+        && studentBelongsToClass(currentUser().studentId, request.resource.data.classId)
+        && exists(/databases/$(database)/documents/students/$(currentUser().studentId))
+        && get(/databases/$(database)/documents/students/$(currentUser().studentId)).data.status == 'active'
+        && get(/databases/$(database)/documents/students/$(currentUser().studentId)).data.userId == request.auth.uid
         && request.resource.data.attachments is list
+        && request.resource.data.attachments.size() > 0
+        && request.resource.data.attachments.size() <= 5
         && request.resource.data.status in ['submitted', 'late'];
     }
 
@@ -190,12 +196,14 @@ service cloud.firestore {
     }
 
     match /activitySubmissions/{submissionId} {
-      allow read: if isTeacher() 
-        || (signedIn() && (
-            resource.data.studentId == currentUser().studentId
-            || (exists(/databases/$(database)/documents/students/$(resource.data.studentId))
-                && get(/databases/$(database)/documents/students/$(resource.data.studentId)).data.userId == request.auth.uid)
-          ));
+      allow read: if (isTeacher() && ownsClass(resource.data.classId))
+        || (isStudent()
+          && resource.data.studentId == currentUser().studentId
+          && studentBelongsToClass(currentUser().studentId, resource.data.classId))
+        || (isStudent()
+          && exists(/databases/$(database)/documents/students/$(resource.data.studentId))
+          && get(/databases/$(database)/documents/students/$(resource.data.studentId)).data.userId == request.auth.uid
+          && studentBelongsToClass(currentUser().studentId, resource.data.classId));
       allow create: if ownsClass(request.resource.data.classId)
         || (
           isStudentImageSubmission()
@@ -208,6 +216,9 @@ service cloud.firestore {
         || (
           isStudentImageSubmission()
           && resource.data.score == null
+          && request.resource.data.activityId == resource.data.activityId
+          && request.resource.data.classId == resource.data.classId
+          && request.resource.data.studentId == resource.data.studentId
           && request.resource.data.diff(resource.data).affectedKeys()
             .hasOnly(['attachments', 'status', 'submittedAt', 'updatedAt'])
         )
@@ -225,23 +236,27 @@ service cloud.firestore {
         );
       allow update: if isTeacher()
         && resource.data.postedBy == request.auth.uid
+        && (
+          request.resource.data.classId == null
+          || ownsClass(request.resource.data.classId)
+        )
         && request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['title', 'message', 'featured', 'updatedAt']);
+          .hasOnly(['title', 'message', 'announcementType', 'targetRole', 'classId', 'featured', 'updatedAt']);
       allow delete: if isTeacher()
         && resource.data.postedBy == request.auth.uid;
     }
 
     match /feedPosts/{postId} {
-      allow read: if isStudent();
+      allow read: if isStudent() || isTeacher();
       allow write: if false;
 
       match /likes/{studentUserId} {
-        allow read: if isStudent();
+        allow read: if isStudent() || isTeacher();
         allow write: if false;
       }
 
       match /comments/{studentUserId} {
-        allow read: if isStudent();
+        allow read: if isStudent() || isTeacher();
         allow write: if false;
       }
     }

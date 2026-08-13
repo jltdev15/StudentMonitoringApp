@@ -30,10 +30,9 @@ service firebase.storage {
 
     function isEnrolledStudent(activityId, studentId) {
       return signedIn()
-        && userProfile().role == 'student'
-        && userProfile().status == 'active'
-        && userProfile().studentId == studentId
-        && activity(activityId).classId in userProfile().classIds;
+        && studentRecord(studentId).status == 'active'
+        && studentRecord(studentId).userId == request.auth.uid
+        && activity(activityId).classId in studentRecord(studentId).classIds;
     }
 
     function isSubmittingStudent(activityId, studentId) {
@@ -43,7 +42,7 @@ service firebase.storage {
     }
 
     function isActivityTeacher(activityId) {
-      return signedIn()
+      return isActiveTeacher()
         && activity(activityId).createdBy == request.auth.uid;
     }
 
@@ -72,8 +71,9 @@ service firebase.storage {
       allow read: if isEnrolledStudent(activityId, studentId)
         || isActivityTeacher(activityId);
       allow create, update: if isSubmittingStudent(activityId, studentId)
-        && request.resource.size < 10 * 1024 * 1024
-        && request.resource.contentType.matches('image/.*');
+        && request.resource.size <= 10 * 1024 * 1024
+        && request.resource.contentType == 'image/webp'
+        && fileName.matches('.*\\.webp');
       allow delete: if isEnrolledStudent(activityId, studentId)
         || isActivityTeacher(activityId);
     }

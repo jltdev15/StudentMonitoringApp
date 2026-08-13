@@ -1,1 +1,1 @@
-export {getAnnouncements, getStudentAnnouncements, saveAnnouncement, setAnnouncementFeatured} from '../services';
+export {deleteAnnouncement, getAnnouncements, getStudentAnnouncements, saveAnnouncement, setAnnouncementFeatured} from '../services';

@@ -17,7 +17,7 @@ vi.mock('firebase/firestore', () => ({
   updateDoc: mocks.updateDoc,
 }));
 
-import {reopenActivity} from './activities.service';
+import {reopenActivity, updateActivityDueDate} from './activities.service';
 
 describe('activity service', () => {
   beforeEach(() => vi.clearAllMocks());
@@ -34,6 +34,15 @@ describe('activity service', () => {
         updatedAt: 'server-time',
         closedAt: null,
       },
+    );
+  });
+
+  it('updates only the due date and timestamp when extending a deadline', async () => {
+    const dueDate = new Date('2026-08-18T23:59:59');
+    await updateActivityDueDate('activity-1', dueDate);
+    expect(mocks.updateDoc).toHaveBeenCalledWith(
+      {collection: 'activities', id: 'activity-1'},
+      {dueDate, updatedAt: 'server-time'},
     );
   });
 });

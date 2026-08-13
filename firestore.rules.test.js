@@ -6,7 +6,7 @@ const {
   assertSucceeds,
   initializeTestEnvironment,
 } = require('@firebase/rules-unit-testing');
-const {doc, getDoc, setDoc} = require('firebase/firestore');
+const {collection, doc, getDoc, getDocs, query, setDoc, where} = require('firebase/firestore');
 
 let environment;
 
@@ -81,6 +81,33 @@ test('students can create one active quiz submission but cannot overwrite it', a
   };
   await assertSucceeds(setDoc(submissionRef, submission));
   await assertFails(setDoc(submissionRef, {...submission, score: 25}, {merge: true}));
+});
+
+test('students can query only their submissions within enrolled classes', async () => {
+  await environment.withSecurityRulesDisabled(async context => {
+    const database = context.firestore();
+    await setDoc(doc(database, 'activitySubmissions', 'quiz-1_student-record'), {
+      activityId: 'quiz-1', classId: 'class-1', studentId: 'student-record', status: 'submitted', score: 20, remarks: '',
+    });
+    await setDoc(doc(database, 'activitySubmissions', 'quiz-1_other-student'), {
+      activityId: 'quiz-1', classId: 'class-1', studentId: 'other-student', status: 'submitted', score: 20, remarks: '',
+    });
+  });
+
+  const database = environment.authenticatedContext('student-user').firestore();
+  const submissions = query(
+    collection(database, 'activitySubmissions'),
+    where('studentId', '==', 'student-record'),
+    where('classId', '==', 'class-1'),
+  );
+  const broadSubmissions = query(
+    collection(database, 'activitySubmissions'),
+    where('studentId', '==', 'student-record'),
+  );
+
+  await assertSucceeds(getDocs(submissions));
+  await assertFails(getDocs(broadSubmissions));
+  await assertFails(getDoc(doc(database, 'activitySubmissions', 'quiz-1_other-student')));
 });
 
 test('students can transition their missing quiz placeholder to submitted exactly once', async () => {

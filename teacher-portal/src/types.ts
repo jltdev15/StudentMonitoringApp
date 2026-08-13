@@ -78,6 +78,9 @@ export type ActivityMaterial = {
   order: number;
 };
 
+/** Shared student-output attachment shape used by the Android and web clients. */
+export type ActivityAttachment = Omit<ActivityMaterial, 'size'> & {size?: number};
+
 export type ActivityRecord = {
   id: string;
   classId: string;
@@ -95,9 +98,10 @@ export type ActivityRecord = {
   status: 'active' | 'closed';
   closedAt?: Timestamp | Date | null;
   reopenedAt?: Timestamp | Date | null;
+  acceptsImageAttachments?: boolean;
 };
 
-export type FeedPostType = 'achievement' | 'attendance' | 'announcement' | 'student';
+export type FeedPostType = 'achievement' | 'attendance' | 'announcement' | 'student' | 'teacher';
 export type StudentFeedPostPresetKey = 'ready_to_learn' | 'good_luck' | 'proud_of_class' | 'congratulations' | 'grateful';
 export type FeedCommentKey = 'congratulations' | 'great_job' | 'well_done' | 'keep_it_up' | 'proud_of_you';
 export type FeedAchiever = {
@@ -149,6 +153,11 @@ export type SubmissionRecord = {
   score: number | null;
   answers?: Record<string, QuizAnswer>;
   remarks: string;
+  attachments?: ActivityAttachment[];
+  checkedBy?: string;
+  submittedAt?: Timestamp | Date | null;
+  createdAt?: Timestamp | Date | null;
+  updatedAt?: Timestamp | Date | null;
 };
 
 export type AnnouncementRecord = {

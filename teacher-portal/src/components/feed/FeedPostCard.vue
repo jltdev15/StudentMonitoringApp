@@ -3,7 +3,9 @@ import {computed, onBeforeUnmount, onMounted, ref, watch} from 'vue';
 import type {FeedAchiever, FeedComment, FeedCommentKey, FeedPost, StudentFeedPostPresetKey} from '../../types';
 import {
   deleteStudentPost,
+  deleteTeacherPost,
   FEED_COMMENT_LABELS,
+  moderateStudentPost,
   STUDENT_FEED_POST_PRESETS,
   subscribeFeedComments,
   subscribeOwnFeedComment,
@@ -11,9 +13,10 @@ import {
   updateFeedComment,
   updateFeedLike,
   updateStudentPost,
+  updateTeacherPost,
 } from '../../services/feed.service';
 
-const props = defineProps<{post: FeedPost; studentUserId: string; currentStudentPhotoUrl?: string; currentStudentFullName?: string}>();
+const props = defineProps<{post: FeedPost; viewerUserId: string; viewerRole: 'student' | 'teacher'; viewerPhotoUrl?: string; viewerFullName?: string}>();
 const liked = ref(false);
 const comments = ref<FeedComment[]>([]);
 const ownComment = ref<FeedComment | null>(null);
@@ -28,6 +31,7 @@ const managementBusy = ref(false);
 const actionError = ref('');
 const editing = ref(false);
 const editPreset = ref<StudentFeedPostPresetKey | ''>(props.post.presetKey || '');
+const editBody = ref(props.post.body || '');
 const showDeleteConfirmation = ref(false);
 const showOwnerMenu = ref(false);
 const avatarFailed = ref(false);
@@ -39,20 +43,22 @@ let stopOwnComment = () => {};
 
 watch(() => props.post.likeCount, value => { displayedLikeCount.value = value || 0; });
 watch(() => props.post.commentCount, value => { displayedCommentCount.value = value || 0; });
-watch(() => [props.post.authorPhotoUrl, props.currentStudentPhotoUrl], () => { avatarFailed.value = false; });
+watch(() => [props.post.authorPhotoUrl, props.viewerPhotoUrl], () => { avatarFailed.value = false; });
 
-const postIcon = computed(() => ({achievement: 'emoji_events', attendance: 'how_to_reg', announcement: 'campaign', student: 'sentiment_satisfied'}[props.post.type]));
-const studentPostAuthorName = computed(() => props.post.authorId === props.studentUserId
-  ? props.currentStudentFullName?.trim() || props.post.authorLabel || 'Student'
-  : props.post.authorLabel || 'Student');
-const postLabel = computed(() => props.post.type === 'student'
-  ? studentPostAuthorName.value
-  : ({achievement: 'School achievement', attendance: 'Class attendance', announcement: 'Teacher announcement'}[props.post.type]));
-const canManagePost = computed(() => props.post.type === 'student' && props.post.authorId === props.studentUserId);
+const postIcon = computed(() => ({achievement: 'emoji_events', attendance: 'how_to_reg', announcement: 'campaign', student: 'sentiment_satisfied', teacher: 'person'}[props.post.type]));
+const authoredPostName = computed(() => props.post.authorId === props.viewerUserId
+  ? props.viewerFullName?.trim() || props.post.authorLabel || (props.post.type === 'teacher' ? 'Teacher' : 'Student')
+  : props.post.authorLabel || (props.post.type === 'teacher' ? 'Teacher' : 'Student'));
+const postLabel = computed(() => ['student', 'teacher'].includes(props.post.type)
+  ? authoredPostName.value
+  : ({achievement: 'School achievement', attendance: 'Class attendance', announcement: 'Teacher announcement'} as Record<string, string>)[props.post.type]);
+const canEditPost = computed(() => ['student', 'teacher'].includes(props.post.type) && props.post.authorId === props.viewerUserId);
+const canModerateStudentPost = computed(() => props.viewerRole === 'teacher' && props.post.type === 'student' && props.post.authorId !== props.viewerUserId);
+const canManagePost = computed(() => canEditPost.value || canModerateStudentPost.value);
 const studentPostPhotoUrl = computed(() => {
   if (props.post.type !== 'student' || avatarFailed.value) return '';
   return props.post.authorPhotoUrl?.trim()
-    || (props.post.authorId === props.studentUserId ? props.currentStudentPhotoUrl?.trim() : '')
+    || (props.post.authorId === props.viewerUserId ? props.viewerPhotoUrl?.trim() : '')
     || '';
 });
 const rankedAchievers = computed<FeedAchiever[]>(() => {
@@ -142,14 +148,14 @@ async function chooseComment(commentKey: FeedCommentKey | null) {
   const previousComments = [...comments.value];
   const previousCount = displayedCommentCount.value;
   const optimisticComment: FeedComment | null = commentKey ? {
-    id: props.studentUserId,
-    displayName: props.currentStudentFullName?.trim() || 'You',
+    id: props.viewerUserId,
+    displayName: props.viewerFullName?.trim() || 'You',
     commentKey,
     comment: FEED_COMMENT_LABELS[commentKey],
   } : null;
 
   ownComment.value = optimisticComment;
-  comments.value = previousComments.filter(item => item.id !== props.studentUserId);
+  comments.value = previousComments.filter(item => item.id !== props.viewerUserId);
   if (optimisticComment) comments.value.unshift(optimisticComment);
   displayedCommentCount.value = Math.max(0, previousCount + (!previousComment && optimisticComment ? 1 : 0) - (previousComment && !optimisticComment ? 1 : 0));
   commentBusy.value = true;
@@ -170,16 +176,20 @@ async function chooseComment(commentKey: FeedCommentKey | null) {
 function beginEditing() {
   showOwnerMenu.value = false;
   editPreset.value = props.post.presetKey || '';
+  editBody.value = props.post.body || '';
   editing.value = true;
   actionError.value = '';
 }
 
 async function saveEdit() {
-  if (!editPreset.value || managementBusy.value) return;
+  if (managementBusy.value) return;
+  if (props.post.type === 'student' && !editPreset.value) return;
+  if (props.post.type === 'teacher' && !editBody.value.trim()) return;
   managementBusy.value = true;
   actionError.value = '';
   try {
-    await updateStudentPost(props.post.id, editPreset.value);
+    if (props.post.type === 'teacher') await updateTeacherPost(props.post.id, editBody.value);
+    else await updateStudentPost(props.post.id, editPreset.value as StudentFeedPostPresetKey);
     editing.value = false;
   } catch (value) {
     actionError.value = value instanceof Error ? value.message : 'Could not update your post.';
@@ -193,7 +203,9 @@ async function confirmDelete() {
   managementBusy.value = true;
   actionError.value = '';
   try {
-    await deleteStudentPost(props.post.id);
+    if (canModerateStudentPost.value) await moderateStudentPost(props.post.id);
+    else if (props.post.type === 'teacher') await deleteTeacherPost(props.post.id);
+    else await deleteStudentPost(props.post.id);
     showDeleteConfirmation.value = false;
   } catch (value) {
     actionError.value = value instanceof Error ? value.message : 'Could not delete your post.';
@@ -207,10 +219,10 @@ onMounted(() => {
   stopComments = subscribeFeedComments(props.post.id, value => {
     if (!commentBusy.value) comments.value = value;
   }, value => { actionError.value = value.message; });
-  stopLike = subscribeOwnFeedLike(props.post.id, props.studentUserId, value => {
+  stopLike = subscribeOwnFeedLike(props.post.id, props.viewerUserId, value => {
     if (!likeBusy.value) liked.value = value;
   });
-  stopOwnComment = subscribeOwnFeedComment(props.post.id, props.studentUserId, value => {
+  stopOwnComment = subscribeOwnFeedComment(props.post.id, props.viewerUserId, value => {
     if (!commentBusy.value) ownComment.value = value;
   });
   document.addEventListener('click', closeOwnerMenu);
@@ -226,20 +238,20 @@ onBeforeUnmount(() => { stopComments(); stopLike(); stopOwnComment(); document.r
 <template>
   <article class="feed-post-card" :class="`feed-post-${post.type}`">
     <header class="feed-post-header">
-      <img v-if="studentPostPhotoUrl" class="feed-post-icon feed-post-avatar" :src="studentPostPhotoUrl" :alt="`${studentPostAuthorName} profile photo`" @error="avatarFailed = true" />
+      <img v-if="studentPostPhotoUrl" class="feed-post-icon feed-post-avatar" :src="studentPostPhotoUrl" :alt="`${authoredPostName} profile photo`" @error="avatarFailed = true" />
       <span v-else class="feed-post-icon material-symbols-outlined" aria-hidden="true">{{ postIcon }}</span>
       <div class="feed-post-byline">
         <strong>{{ postLabel }}</strong>
-        <span v-if="post.type !== 'student'">{{ post.authorLabel || post.classLabel || 'PORTAL' }}</span>
+        <span v-if="!['student', 'teacher'].includes(post.type)">{{ post.authorLabel || post.classLabel || 'PORTAL' }}</span>
         <time v-else>{{ publishedLabel }}</time>
       </div>
       <div class="feed-post-meta">
-        <time v-if="post.type !== 'student'">{{ publishedLabel }}</time>
+        <time v-if="!['student', 'teacher'].includes(post.type)">{{ publishedLabel }}</time>
         <div v-if="canManagePost" class="feed-owner-menu" @click.stop>
           <button type="button" class="feed-owner-menu-trigger" :aria-expanded="showOwnerMenu" aria-label="More options for your post" :disabled="managementBusy" @click="showOwnerMenu = !showOwnerMenu"><span class="material-symbols-outlined" aria-hidden="true">more_horiz</span></button>
           <div v-if="showOwnerMenu" class="feed-owner-menu-popover" role="menu">
-            <button type="button" role="menuitem" :disabled="managementBusy" aria-label="Edit your post" @click="beginEditing"><span class="material-symbols-outlined" aria-hidden="true">edit</span>Edit post</button>
-            <button type="button" role="menuitem" class="delete" :disabled="managementBusy" aria-label="Delete your post" @click="showOwnerMenu = false; showDeleteConfirmation = true"><span class="material-symbols-outlined" aria-hidden="true">delete</span>Delete post</button>
+            <button v-if="canEditPost" type="button" role="menuitem" :disabled="managementBusy" aria-label="Edit your post" @click="beginEditing"><span class="material-symbols-outlined" aria-hidden="true">edit</span>Edit post</button>
+            <button type="button" role="menuitem" class="delete" :disabled="managementBusy" :aria-label="canModerateStudentPost ? 'Remove student post' : 'Delete your post'" @click="showOwnerMenu = false; showDeleteConfirmation = true"><span class="material-symbols-outlined" aria-hidden="true">delete</span>{{ canModerateStudentPost ? 'Remove post' : 'Delete post' }}</button>
           </div>
         </div>
       </div>
@@ -248,14 +260,15 @@ onBeforeUnmount(() => { stopComments(); stopLike(); stopOwnComment(); document.r
     <div class="feed-post-content">
       <span v-if="post.type === 'announcement'" class="feed-type-chip">{{ post.announcementType || 'General' }}</span>
       <span v-else-if="post.type === 'achievement'" class="feed-type-chip feed-activity-type">{{ activityCategoryLabel }}</span>
-      <h3 v-if="post.type !== 'student'">{{ post.title }}</h3>
+      <h3 v-if="post.type !== 'student' && post.type !== 'teacher'">{{ post.title }}</h3>
       <form v-if="editing" class="feed-post-edit-form" @submit.prevent="saveEdit">
-        <label :for="`edit-post-${post.id}`">Approved message</label>
+        <template v-if="post.type === 'student'"><label :for="`edit-post-${post.id}`">Approved message</label>
         <select :id="`edit-post-${post.id}`" v-model="editPreset" :disabled="managementBusy">
           <option value="" disabled>Choose a message</option>
           <option v-for="(message, key) in STUDENT_FEED_POST_PRESETS" :key="key" :value="key">{{ message }}</option>
-        </select>
-        <div><button type="button" class="secondary" :disabled="managementBusy" @click="editing = false">Cancel</button><button type="submit" class="primary" :disabled="!editPreset || managementBusy">{{ managementBusy ? 'Saving…' : 'Save changes' }}</button></div>
+        </select></template>
+        <template v-else><label :for="`edit-body-${post.id}`">Message</label><textarea :id="`edit-body-${post.id}`" v-model="editBody" maxlength="1000" rows="4" :disabled="managementBusy"></textarea></template>
+        <div><button type="button" class="secondary" :disabled="managementBusy" @click="editing = false">Cancel</button><button type="submit" class="primary" :disabled="managementBusy || (post.type === 'student' ? !editPreset : !editBody.trim())">{{ managementBusy ? 'Saving…' : 'Save changes' }}</button></div>
       </form>
       <p v-else :class="{'feed-post-body-collapsed': canCollapseBody && !showFullBody}">{{ post.body }}</p>
       <button
@@ -321,7 +334,7 @@ onBeforeUnmount(() => { stopComments(); stopLike(); stopOwnComment(); document.r
         <section class="feed-delete-dialog" role="alertdialog" aria-modal="true" :aria-labelledby="`delete-title-${post.id}`" :aria-describedby="`delete-copy-${post.id}`">
           <span class="material-symbols-outlined" aria-hidden="true">delete</span>
           <h2 :id="`delete-title-${post.id}`">Delete this post?</h2>
-          <p :id="`delete-copy-${post.id}`">This removes your update and its likes and comments from the school feed. This action cannot be undone.</p>
+          <p :id="`delete-copy-${post.id}`">{{ canModerateStudentPost ? 'This permanently removes the student post and all of its likes and comments. This action cannot be undone.' : 'This removes your update and its likes and comments from the school feed. This action cannot be undone.' }}</p>
           <div><button type="button" class="secondary" :disabled="managementBusy" @click="showDeleteConfirmation = false">Keep post</button><button type="button" class="danger" :disabled="managementBusy" @click="confirmDelete">{{ managementBusy ? 'Deleting…' : 'Delete post' }}</button></div>
         </section>
       </div>

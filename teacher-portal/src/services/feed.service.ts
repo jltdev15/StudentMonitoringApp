@@ -95,6 +95,10 @@ const setComment = httpsCallable<{postId: string; commentKey: FeedCommentKey | n
 const createPost = httpsCallable<{presetKey: StudentFeedPostPresetKey}, {postId: string}>(functions, 'createStudentFeedPost');
 const updatePost = httpsCallable<{postId: string; presetKey: StudentFeedPostPresetKey}, {postId: string}>(functions, 'updateStudentFeedPost');
 const deletePost = httpsCallable<{postId: string}, {postId: string}>(functions, 'deleteStudentFeedPost');
+const createTeacherFeedPost = httpsCallable<{message: string}, {postId: string}>(functions, 'createTeacherFeedPost');
+const updateTeacherFeedPost = httpsCallable<{postId: string; message: string}, {postId: string}>(functions, 'updateTeacherFeedPost');
+const deleteTeacherFeedPost = httpsCallable<{postId: string}, {postId: string}>(functions, 'deleteTeacherFeedPost');
+const moderateStudentFeedPost = httpsCallable<{postId: string}, {postId: string}>(functions, 'moderateStudentFeedPost');
 
 export const updateFeedLike = async (postId: string, liked: boolean) => {
   await setLike({postId, liked});
@@ -115,4 +119,21 @@ export const updateStudentPost = async (postId: string, presetKey: StudentFeedPo
 
 export const deleteStudentPost = async (postId: string) => {
   await deletePost({postId});
+};
+
+export const createTeacherPost = async (message: string) => {
+  const result = await createTeacherFeedPost({message});
+  return result.data.postId;
+};
+
+export const updateTeacherPost = async (postId: string, message: string) => {
+  await updateTeacherFeedPost({postId, message});
+};
+
+export const deleteTeacherPost = async (postId: string) => {
+  await deleteTeacherFeedPost({postId});
+};
+
+export const moderateStudentPost = async (postId: string) => {
+  await moderateStudentFeedPost({postId});
 };

@@ -4,8 +4,9 @@ import type {FeedPost, FeedPostType} from '../../types';
 import {getOlderFeedPosts, subscribeFeedPosts, type FeedCursor} from '../../services/feed.service';
 import FeedPostCard from './FeedPostCard.vue';
 import StudentFeedComposer from './StudentFeedComposer.vue';
+import TeacherFeedComposer from './TeacherFeedComposer.vue';
 
-defineProps<{studentUserId: string; studentPhotoUrl?: string; studentFullName?: string}>();
+const props = defineProps<{viewerUserId: string; viewerRole: 'student' | 'teacher'; viewerPhotoUrl?: string; viewerFullName?: string}>();
 const posts = ref<FeedPost[]>([]);
 const cursor = ref<FeedCursor>(null);
 const hasMore = ref(false);
@@ -20,6 +21,7 @@ const filterOptions: {id: FeedFilter; label: string}[] = [
   {id: 'attendance', label: 'Attendance'},
   {id: 'announcement', label: 'Announcements'},
   {id: 'student', label: 'Student posts'},
+  {id: 'teacher', label: 'Teacher posts'},
 ];
 let stopFeed = () => {};
 
@@ -27,7 +29,7 @@ const postCounts = computed(() => posts.value.reduce<Record<FeedFilter, number>>
   counts.all += 1;
   counts[post.type] += 1;
   return counts;
-}, {all: 0, achievement: 0, attendance: 0, announcement: 0, student: 0}));
+}, {all: 0, achievement: 0, attendance: 0, announcement: 0, student: 0, teacher: 0}));
 const visiblePosts = computed(() => activeFilter.value === 'all'
   ? posts.value
   : posts.value.filter(post => post.type === activeFilter.value));
@@ -94,7 +96,8 @@ onBeforeUnmount(() => stopFeed());
           </nav>
         </div>
 
-        <StudentFeedComposer />
+        <StudentFeedComposer v-if="props.viewerRole === 'student'" />
+        <TeacherFeedComposer v-else />
 
         <div class="student-feed-column">
           <div v-if="loading" class="feed-loading" aria-live="polite"><span></span><span></span><span></span><p>Loading school updates…</p></div>
@@ -102,7 +105,7 @@ onBeforeUnmount(() => stopFeed());
           <div v-else-if="!posts.length" class="empty-state"><b>≋</b><h3>No school updates yet</h3><p>New achievements and class updates will appear here.</p></div>
           <template v-else>
             <div v-if="!visiblePosts.length" class="feed-filter-empty"><span class="material-symbols-outlined" aria-hidden="true">filter_list_off</span><strong>No posts in this view</strong><p>Choose another feed filter to see recent school updates.</p></div>
-            <FeedPostCard v-for="post in visiblePosts" :key="post.id" :post="post" :student-user-id="studentUserId" :current-student-photo-url="studentPhotoUrl" :current-student-full-name="studentFullName" />
+            <FeedPostCard v-for="post in visiblePosts" :key="post.id" :post="post" :viewer-user-id="viewerUserId" :viewer-role="viewerRole" :viewer-photo-url="viewerPhotoUrl" :viewer-full-name="viewerFullName" />
             <p v-if="error" class="feed-page-error" role="alert">{{ error }}</p>
             <button v-if="hasMore" type="button" class="secondary feed-load-more" :disabled="loadingMore" @click="loadMore">{{ loadingMore ? 'Loading…' : 'Load older posts' }}</button>
             <p v-else-if="visiblePosts.length" class="feed-end-copy">You’re up to date.</p>
@@ -114,7 +117,7 @@ onBeforeUnmount(() => stopFeed());
         <section class="feed-rail-card">
           <span class="feed-rail-icon material-symbols-outlined" aria-hidden="true">groups</span>
           <h3>One school community</h3>
-          <p>This feed is shared by every active student across all grades and sections.</p>
+          <p>This feed is shared by active students and teachers across all grades and sections.</p>
         </section>
         <section class="feed-rail-card feed-rail-guide">
           <h3>What appears here</h3>
@@ -123,8 +126,10 @@ onBeforeUnmount(() => stopFeed());
             <li><span class="material-symbols-outlined" aria-hidden="true">how_to_reg</span><div><strong>Attendance</strong><small>Class-session participation totals.</small></div></li>
             <li><span class="material-symbols-outlined" aria-hidden="true">campaign</span><div><strong>Announcements</strong><small>School-wide updates from teachers.</small></div></li>
             <li><span class="material-symbols-outlined" aria-hidden="true">sentiment_satisfied</span><div><strong>Student posts</strong><small>Positive updates selected from approved messages.</small></div></li>
+            <li><span class="material-symbols-outlined" aria-hidden="true">person</span><div><strong>Teacher posts</strong><small>Titled school updates written by teachers.</small></div></li>
           </ul>
         </section>
+        <p v-if="props.viewerRole === 'teacher'" class="feed-privacy-note"><span class="material-symbols-outlined" aria-hidden="true">shield</span>Teachers may remove inappropriate student posts.</p>
         <p class="feed-privacy-note"><span class="material-symbols-outlined" aria-hidden="true">leaderboard</span>Achievement results are ranked by recorded score.</p>
       </aside>
     </div>

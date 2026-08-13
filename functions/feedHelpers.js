@@ -104,6 +104,13 @@ const studentFeedProfileChange = (before, after) => {
   return {userId, photoUrl};
 };
 
+const validateTeacherPost = message => {
+  const normalizedMessage = String(message || '').trim();
+  if (!normalizedMessage) return {error: 'Enter a message.'};
+  if (normalizedMessage.length > 1000) return {error: 'Messages must be 1,000 characters or fewer.'};
+  return {title: '', message: normalizedMessage, error: ''};
+};
+
 module.exports = {
   activityCategoryForFeed,
   activityIdsForSubmissionChange,
@@ -115,5 +122,6 @@ module.exports = {
   rankedAchievers,
   studentFeedProfileChange,
   STUDENT_POST_PRESETS,
+  validateTeacherPost,
   weekdayForManilaDate,
 };

@@ -11,8 +11,10 @@ export const routes: RouteRecordRaw[] = [
   {path: '/verify-email', name: 'verify-email', component: portal, meta: {public: true}},
   {path: '/admin', redirect: '/admin/overview'},
   {path: '/admin/overview', name: 'admin-overview', component: portal, meta: {role: 'teacher', view: 'dashboard'}},
+  {path: '/admin/feed', name: 'admin-feed', component: portal, meta: {role: 'teacher', view: 'feed'}},
   {path: '/admin/classes', name: 'admin-classes', component: portal, meta: {role: 'teacher', view: 'classes'}},
   {path: '/admin/students', name: 'admin-students', component: portal, meta: {role: 'teacher', view: 'students'}},
+  {path: '/admin/students/:studentId', name: 'admin-student-profile', component: portal, meta: {role: 'teacher', view: 'student-profile'}},
   {path: '/admin/attendance', name: 'admin-attendance', component: portal, meta: {role: 'teacher', view: 'attendance'}},
   {path: '/admin/activities', name: 'admin-activities', component: portal, meta: {role: 'teacher', view: 'activities'}},
   {path: '/admin/announcements', name: 'admin-announcements', component: portal, meta: {role: 'teacher', view: 'announcements'}},
@@ -27,6 +29,7 @@ export const routes: RouteRecordRaw[] = [
   {path: '/student/announcements', name: 'student-announcements', component: portal, meta: {role: 'student', view: 'announcements'}},
   {path: '/student/profile', name: 'student-profile', component: portal, meta: {role: 'student', view: 'profile'}},
   {path: '/student/activities/:activityId/take', name: 'student-take-quiz', component: portal, meta: {role: 'student', view: 'take-quiz'}},
+  {path: '/student/activities/:activityId/submit', name: 'student-submit-activity', component: portal, meta: {role: 'student', view: 'submit-activity'}},
   {path: '/student/activities/:activityId/review', name: 'student-review-quiz', component: portal, meta: {role: 'student', view: 'review-quiz'}},
   {path: '/:pathMatch(.*)*', redirect: '/login'},
 ];

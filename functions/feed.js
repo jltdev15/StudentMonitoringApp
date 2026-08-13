@@ -11,6 +11,7 @@ const {
   rankedAchievers,
   studentFeedProfileChange,
   STUDENT_POST_PRESETS,
+  validateTeacherPost,
 } = require('./feedHelpers');
 
 const db = getFirestore();
@@ -219,23 +220,35 @@ async function activeTeacher(request) {
   if (!user || user.role !== 'teacher' || user.status !== 'active') {
     throw new HttpsError('permission-denied', 'Only active teachers can manage the feed.');
   }
-  return user;
+  return {uid: request.auth.uid, ...user};
+}
+
+async function activeFeedMember(request) {
+  if (!request.auth?.uid) throw new HttpsError('unauthenticated', 'Sign in to interact with the feed.');
+  const userSnapshot = await db.collection('users').doc(request.auth.uid).get();
+  const user = userSnapshot.exists ? userSnapshot.data() : null;
+  if (!user || user.status !== 'active' || !['student', 'teacher'].includes(user.role)) {
+    throw new HttpsError('permission-denied', 'Only active students and teachers can interact with the feed.');
+  }
+  if (user.role === 'teacher') return {uid: request.auth.uid, role: 'teacher', displayName: String(user.fullName || 'Teacher').trim() || 'Teacher'};
+  const student = await activeStudent(request);
+  return {...student, role: 'student'};
 }
 
 const setFeedLike = onCall(async request => {
-  const student = await activeStudent(request);
+  const member = await activeFeedMember(request);
   const postId = String(request.data?.postId || '');
   const liked = request.data?.liked === true;
   if (!postId) throw new HttpsError('invalid-argument', 'A feed post is required.');
   const postRef = feedPost(postId);
-  const likeRef = postRef.collection('likes').doc(student.uid);
+  const likeRef = postRef.collection('likes').doc(member.uid);
 
   return db.runTransaction(async transaction => {
     const [postSnapshot, likeSnapshot] = await Promise.all([transaction.get(postRef), transaction.get(likeRef)]);
     if (!postSnapshot.exists) throw new HttpsError('not-found', 'This feed post is no longer available.');
     const wasLiked = likeSnapshot.exists;
     if (liked && !wasLiked) {
-      transaction.set(likeRef, {displayName: student.displayName, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()});
+      transaction.set(likeRef, {displayName: member.displayName, role: member.role, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()});
       transaction.update(postRef, {likeCount: FieldValue.increment(1)});
     } else if (!liked && wasLiked) {
       transaction.delete(likeRef);
@@ -246,7 +259,7 @@ const setFeedLike = onCall(async request => {
 });
 
 const setFeedComment = onCall(async request => {
-  const student = await activeStudent(request);
+  const member = await activeFeedMember(request);
   const postId = String(request.data?.postId || '');
   const commentKey = request.data?.commentKey == null ? null : String(request.data.commentKey);
   if (!postId) throw new HttpsError('invalid-argument', 'A feed post is required.');
@@ -254,7 +267,7 @@ const setFeedComment = onCall(async request => {
     throw new HttpsError('invalid-argument', 'Choose one of the approved comments.');
   }
   const postRef = feedPost(postId);
-  const commentRef = postRef.collection('comments').doc(student.uid);
+  const commentRef = postRef.collection('comments').doc(member.uid);
 
   return db.runTransaction(async transaction => {
     const [postSnapshot, commentSnapshot] = await Promise.all([transaction.get(postRef), transaction.get(commentRef)]);
@@ -262,7 +275,8 @@ const setFeedComment = onCall(async request => {
     const hadComment = commentSnapshot.exists;
     if (commentKey) {
       transaction.set(commentRef, {
-        displayName: student.displayName,
+        displayName: member.displayName,
+        role: member.role,
         commentKey,
         comment: COMMENT_LABELS[commentKey],
         createdAt: commentSnapshot.data()?.createdAt || FieldValue.serverTimestamp(),
@@ -338,6 +352,59 @@ const deleteStudentFeedPost = onCall(async request => {
   const student = await activeStudent(request);
   const postId = String(request.data?.postId || '');
   const postRef = await ownedStudentPost(postId, student.uid);
+  await db.recursiveDelete(postRef);
+  return {postId};
+});
+
+const teacherPostInput = request => {
+  const value = validateTeacherPost(request.data?.message);
+  if (value.error) throw new HttpsError('invalid-argument', value.error);
+  return value;
+};
+
+const createTeacherFeedPost = onCall(async request => {
+  const teacher = await activeTeacher(request);
+  const input = teacherPostInput(request);
+  const postRef = db.collection('feedPosts').doc();
+  const now = Timestamp.now();
+  await postRef.create({type: 'teacher', sourceId: postRef.id, authorId: teacher.uid, authorLabel: String(teacher.fullName || 'Teacher').trim() || 'Teacher', title: '', body: input.message, likeCount: 0, commentCount: 0, publishedAt: now, updatedAt: now});
+  return {postId: postRef.id};
+});
+
+const ownedTeacherPost = async (postId, teacherUid) => {
+  if (!postId) throw new HttpsError('invalid-argument', 'A feed post is required.');
+  const postRef = feedPost(postId);
+  const snapshot = await postRef.get();
+  if (!snapshot.exists) throw new HttpsError('not-found', 'This feed post is no longer available.');
+  if (snapshot.data().type !== 'teacher' || snapshot.data().authorId !== teacherUid) throw new HttpsError('permission-denied', 'You can only manage your own teacher posts.');
+  return postRef;
+};
+
+const updateTeacherFeedPost = onCall(async request => {
+  const teacher = await activeTeacher(request);
+  const input = teacherPostInput(request);
+  const postId = String(request.data?.postId || '');
+  const postRef = await ownedTeacherPost(postId, teacher.uid);
+  await postRef.update({title: '', body: input.message, updatedAt: FieldValue.serverTimestamp()});
+  return {postId};
+});
+
+const deleteTeacherFeedPost = onCall(async request => {
+  const teacher = await activeTeacher(request);
+  const postId = String(request.data?.postId || '');
+  const postRef = await ownedTeacherPost(postId, teacher.uid);
+  await db.recursiveDelete(postRef);
+  return {postId};
+});
+
+const moderateStudentFeedPost = onCall(async request => {
+  await activeTeacher(request);
+  const postId = String(request.data?.postId || '');
+  if (!postId) throw new HttpsError('invalid-argument', 'A feed post is required.');
+  const postRef = feedPost(postId);
+  const snapshot = await postRef.get();
+  if (!snapshot.exists) throw new HttpsError('not-found', 'This feed post is no longer available.');
+  if (snapshot.data().type !== 'student') throw new HttpsError('permission-denied', 'Teachers may moderate student posts only.');
   await db.recursiveDelete(postRef);
   return {postId};
 });
@@ -421,10 +488,14 @@ const backfillStudentFeed = onCall({timeoutSeconds: 540, memory: '512MiB'}, asyn
 module.exports = {
   backfillStudentFeed,
   createStudentFeedPost,
+  createTeacherFeedPost,
   deleteStudentFeedPost,
+  deleteTeacherFeedPost,
+  moderateStudentFeedPost,
   setFeedComment,
   setFeedLike,
   updateStudentFeedPost,
+  updateTeacherFeedPost,
   syncAchievementPost,
   syncAnnouncementPost,
   syncAttendanceSessionPost,

@@ -19,7 +19,7 @@ describe('StudentFeedPage', () => {
   it('shows a neutral empty state without an announcement placeholder', async () => {
     service.subscribeFeedPosts.mockImplementation(onValue => { onValue([], null, false); return vi.fn(); });
     const wrapper = mount(StudentFeedPage, {
-      props: {studentUserId: 'student-user'},
+      props: {viewerUserId: 'student-user', viewerRole: 'student'},
       global: {stubs: {FeedPostCard: true}},
     });
     await wrapper.vm.$nextTick();
@@ -40,7 +40,7 @@ describe('StudentFeedPage', () => {
       return vi.fn();
     });
     const wrapper = mount(StudentFeedPage, {
-      props: {studentUserId: 'student-user'},
+      props: {viewerUserId: 'student-user', viewerRole: 'student'},
       global: {stubs: {FeedPostCard: {template: '<article class="stub-feed-post" />'}}},
     });
     await wrapper.vm.$nextTick();
@@ -56,7 +56,7 @@ describe('StudentFeedPage', () => {
       return vi.fn();
     });
     const wrapper = mount(StudentFeedPage, {
-      props: {studentUserId: 'student-user'},
+      props: {viewerUserId: 'student-user', viewerRole: 'student'},
       global: {stubs: {FeedPostCard: {props: ['post'], template: '<article class="stub-feed-post">{{ post.type }}</article>'}}},
     });
     await wrapper.vm.$nextTick();
@@ -65,5 +65,18 @@ describe('StudentFeedPage', () => {
     await achievementFilter!.trigger('click');
     expect(wrapper.findAll('.stub-feed-post')).toHaveLength(1);
     expect(wrapper.get('.stub-feed-post').text()).toBe('achievement');
+  });
+
+  it('shows the teacher composer and teacher-post filter for teachers', async () => {
+    service.subscribeFeedPosts.mockImplementation(onValue => { onValue([], null, false); return vi.fn(); });
+    const wrapper = mount(StudentFeedPage, {
+      props: {viewerUserId: 'teacher-user', viewerRole: 'teacher', viewerFullName: 'John Teacher'},
+      global: {stubs: {FeedPostCard: true, TeacherFeedComposer: {template: '<section class="teacher-composer-stub" />'}}},
+    });
+    await wrapper.vm.$nextTick();
+    expect(wrapper.find('.teacher-composer-stub').exists()).toBe(true);
+    expect(wrapper.findComponent({name: 'StudentFeedComposer'}).exists()).toBe(false);
+    expect(wrapper.text()).toContain('Teacher posts');
+    expect(wrapper.text()).toContain('Teachers may remove inappropriate student posts');
   });
 });

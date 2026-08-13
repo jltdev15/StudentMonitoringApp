@@ -2,6 +2,7 @@ import {
   addDoc,
   arrayRemove,
   collection,
+  deleteDoc,
   doc,
   getDoc,
   getDocs,
@@ -201,9 +202,11 @@ export const removeActivityMaterial = async (
 
 export const closeActivity = (id: string) => updateDoc(doc(db, 'activities', id), {status: 'closed', closedAt: serverTimestamp(), updatedAt: serverTimestamp()});
 
-export const getSubmissions = async (activityId: string) => {
-  const result = await getDocs(query(collection(db, 'activitySubmissions'), where('activityId', '==', activityId)));
-  return result.docs.map(item => record<SubmissionRecord>(item));
+export const getSubmissions = async (activityId: string, classId?: string) => {
+  // Teacher reads must constrain the query to an owned class; filtering the
+  // activity client-side also avoids requiring a composite Firestore index.
+  const result = await getDocs(query(collection(db, 'activitySubmissions'), where(classId ? 'classId' : 'activityId', '==', classId || activityId)));
+  return result.docs.map(item => record<SubmissionRecord>(item)).filter(item => item.activityId === activityId);
 };
 
 export const saveScores = async (activity: ActivityRecord, teacherId: string, items: {studentId: string; status: SubmissionStatus; score: number | null; remarks: string}[]) => {
@@ -256,6 +259,10 @@ export const saveAnnouncement = async (teacherId: string, payload: Omit<Announce
 
 export const setAnnouncementFeatured = (announcementId: string, featured: boolean) =>
   updateDoc(doc(db, 'announcements', announcementId), {featured, updatedAt: serverTimestamp()});
+
+export const deleteAnnouncement = async (announcementId: string) => {
+  await deleteDoc(doc(db, 'announcements', announcementId));
+};
 
 export type ResetTotals = {
   attendance: number;
@@ -356,9 +363,24 @@ export const getStudentAttendanceRecords = async (studentId: string) => {
   return result.docs.map(item => record<AttendanceRecord>(item));
 };
 
-export const getStudentSubmissions = async (studentId: string) => {
-  const result = await getDocs(query(collection(db, 'activitySubmissions'), where('studentId', '==', studentId)));
-  return result.docs.map(item => record<SubmissionRecord>(item));
+export const getStudentSubmissions = async (studentId: string, classIds: string[] = []) => {
+  if (!classIds.length) return [];
+
+  // Student rules authorize submissions only when both the student and class
+  // match the authenticated student's enrolled classes. Query each class so
+  // Firestore can prove that every returned document is permitted.
+  const snapshots = await Promise.all(classIds.map(classId => getDocs(query(
+    collection(db, 'activitySubmissions'),
+    where('studentId', '==', studentId),
+    where('classId', '==', classId),
+  ))));
+
+  const submissions = new Map<string, SubmissionRecord>();
+  snapshots.forEach(snapshot => snapshot.docs.forEach(item => {
+    const submission = record<SubmissionRecord>(item);
+    submissions.set(submission.id, submission);
+  }));
+  return [...submissions.values()];
 };
 
 export const getStudentActivities = async (classIds: string[]) => {

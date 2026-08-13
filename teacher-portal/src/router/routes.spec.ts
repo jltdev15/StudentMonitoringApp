@@ -14,4 +14,17 @@ describe('portal routes', () => {
       meta: {role: 'student', view: 'feed'},
     });
   });
+
+  it('registers the teacher feed while keeping overview as the teacher landing page', () => {
+    expect(routes.find(route => route.path === '/admin')).toMatchObject({redirect: '/admin/overview'});
+    expect(routes.find(route => route.path === '/admin/feed')).toMatchObject({
+      name: 'admin-feed', meta: {role: 'teacher', view: 'feed'},
+    });
+  });
+
+  it('registers a protected teacher-facing student profile route', () => {
+    expect(routes.find(route => route.path === '/admin/students/:studentId')).toMatchObject({
+      name: 'admin-student-profile', meta: {role: 'teacher', view: 'student-profile'},
+    });
+  });
 });
