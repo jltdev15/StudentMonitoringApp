@@ -2,6 +2,11 @@ import {describe, expect, it} from 'vitest';
 import {routes} from './index';
 
 describe('portal routes', () => {
+  it('registers branded public password-reset routes', () => {
+    expect(routes.find(route => route.path === '/forgot-password')).toMatchObject({name: 'forgot-password', meta: {public: true}});
+    expect(routes.find(route => route.path === '/reset-password')).toMatchObject({name: 'reset-password', meta: {public: true}});
+  });
+
   it('uses the feed as the student landing page and redirects the legacy overview URL', () => {
     expect(routes.find(route => route.path === '/student')).toMatchObject({redirect: '/student/feed'});
     expect(routes.find(route => route.path === '/student/overview')).toMatchObject({redirect: '/student/feed'});

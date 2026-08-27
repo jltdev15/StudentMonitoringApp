@@ -6,6 +6,8 @@ const portal = () => import('../app/PortalApplication.vue');
 export const routes: RouteRecordRaw[] = [
   {path: '/', redirect: '/login'},
   {path: '/login', name: 'login', component: portal, meta: {public: true}},
+  {path: '/forgot-password', name: 'forgot-password', component: portal, meta: {public: true}},
+  {path: '/reset-password', name: 'reset-password', component: portal, meta: {public: true}},
   {path: '/register/verify', name: 'register-verify', component: portal, meta: {public: true}},
   {path: '/register/account', name: 'register-account', component: portal, meta: {public: true}},
   {path: '/verify-email', name: 'verify-email', component: portal, meta: {public: true}},

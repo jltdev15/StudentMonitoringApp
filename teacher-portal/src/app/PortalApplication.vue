@@ -14,7 +14,7 @@ import AppBrand from '../components/shell/AppBrand.vue';
 import StudentFeedPage from '../components/feed/StudentFeedPage.vue';
 import TeacherStudentProfilePage from '../components/students/TeacherStudentProfilePage.vue';
 import {auth, isFirebaseConfigured} from '../firebase';
-import {createStudentUserProfile, getUserProfile} from '../services/auth.service';
+import {completePasswordReset, createStudentUserProfile, getUserProfile, requestPasswordReset, verifyPasswordReset} from '../services/auth.service';
 import {archiveClass, deleteClass, getClassesByIds, getTeacherClasses, saveClass} from '../services/classes.service';
 import {archiveStudent, claimRosterStudent, findRosterStudent, getStudentRecordByUserId, getStudentsByClass, MAX_PROFILE_PHOTO_BYTES, saveStudent, updateStudentProfile, uploadStudentProfilePhoto} from '../services/students.service';
 import {getAttendance, getStudentAttendanceRecords, saveAttendance} from '../services/attendance.service';
@@ -50,12 +50,21 @@ const message = ref('');
 const error = ref('');
 const email = ref('');
 const password = ref('');
+const showPassword = ref(false);
 const mobileMenuOpen = ref(false);
 const mobileMenuButton = ref<HTMLButtonElement | null>(null);
 const mobileMenuCloseButton = ref<HTMLButtonElement | null>(null);
 
-const authMode = ref<'login' | 'verify' | 'register' | 'verify-notice'>('login');
+const authMode = ref<'login' | 'forgot-password' | 'reset-password' | 'verify' | 'register' | 'verify-notice'>('login');
 const registeredEmailForNotice = ref('');
+const forgotPasswordEmail = ref('');
+const forgotPasswordSent = ref(false);
+const resetPasswordCode = ref('');
+const resetPasswordEmail = ref('');
+const resetPasswordValue = ref('');
+const resetPasswordConfirmation = ref('');
+const resetPasswordVerified = ref(false);
+const resetPasswordCompleted = ref(false);
 const regStudentNumber = ref('');
 const regFullName = ref('');
 const regEmail = ref('');
@@ -180,6 +189,8 @@ watch(() => activityForm.activityCategory, category => {
 
 const authModeByRoute = {
   login: 'login',
+  'forgot-password': 'forgot-password',
+  'reset-password': 'reset-password',
   'register-verify': 'verify',
   'register-account': 'register',
   'verify-email': 'verify-notice',
@@ -187,7 +198,18 @@ const authModeByRoute = {
 
 watch(() => route.name, name => {
   const routeAuthMode = authModeByRoute[name as keyof typeof authModeByRoute];
-  if (routeAuthMode) authMode.value = routeAuthMode;
+  if (routeAuthMode) {
+    authMode.value = routeAuthMode;
+    if (routeAuthMode === 'forgot-password') {
+      const queryEmail = typeof route.query.email === 'string' ? route.query.email.trim() : '';
+      if (queryEmail) forgotPasswordEmail.value = queryEmail;
+    }
+    if (routeAuthMode === 'login') {
+      const queryEmail = typeof route.query.email === 'string' ? route.query.email.trim() : '';
+      if (queryEmail) email.value = queryEmail;
+    }
+    if (routeAuthMode === 'reset-password') void preparePasswordReset();
+  }
   const routeView = route.meta.view as View | undefined;
   if (routeView) view.value = routeView;
 }, {immediate: true});
@@ -496,6 +518,101 @@ function switchAuthMode(mode: 'login' | 'verify' | 'register' | 'verify-notice')
     regPassword.value = '';
     regConfirmPassword.value = '';
     verifiedRosterStudent.value = null;
+  }
+}
+
+function goToForgotPassword() {
+  resetAlerts();
+  forgotPasswordSent.value = false;
+  forgotPasswordEmail.value = email.value.trim();
+  router.push({path: '/forgot-password', query: forgotPasswordEmail.value ? {email: forgotPasswordEmail.value} : {}});
+}
+
+function returnToLogin() {
+  resetAlerts();
+  resetPasswordValue.value = '';
+  resetPasswordConfirmation.value = '';
+  router.push({path: '/login', query: forgotPasswordEmail.value ? {email: forgotPasswordEmail.value} : {}});
+}
+
+async function requestResetEmail() {
+  resetAlerts();
+  const normalizedEmail = forgotPasswordEmail.value.trim().toLowerCase();
+  if (!normalizedEmail || !normalizedEmail.includes('@')) {
+    showError('Enter a valid email address.');
+    return;
+  }
+  busy.value = true;
+  try {
+    await requestPasswordReset(normalizedEmail);
+    forgotPasswordEmail.value = normalizedEmail;
+    forgotPasswordSent.value = true;
+  } catch (value) {
+    const code = typeof value === 'object' && value && 'code' in value ? String(value.code) : '';
+    // Account-specific errors must never reveal whether an address is registered.
+    if (code === 'auth/user-not-found' || code === 'auth/invalid-credential') {
+      forgotPasswordSent.value = true;
+    } else {
+      showError(value);
+    }
+  } finally {
+    busy.value = false;
+  }
+}
+
+async function preparePasswordReset() {
+  resetAlerts();
+  resetPasswordCompleted.value = false;
+  resetPasswordVerified.value = false;
+  resetPasswordValue.value = '';
+  resetPasswordConfirmation.value = '';
+  const code = typeof route.query.oobCode === 'string' ? route.query.oobCode : '';
+  resetPasswordCode.value = code;
+  if (!code) {
+    showError('This password reset link is incomplete. Request a new link to continue.');
+    return;
+  }
+  busy.value = true;
+  try {
+    resetPasswordEmail.value = await verifyPasswordReset(code);
+    resetPasswordVerified.value = true;
+  } catch (value) {
+    showError('This password reset link is invalid or has expired. Request a new link to continue.');
+  } finally {
+    busy.value = false;
+  }
+}
+
+async function saveNewPassword() {
+  resetAlerts();
+  if (!resetPasswordVerified.value || !resetPasswordCode.value) {
+    showError('This password reset link is invalid or has expired. Request a new link to continue.');
+    return;
+  }
+  if (resetPasswordValue.value.length < 6) {
+    showError('Password must be at least 6 characters.');
+    return;
+  }
+  if (resetPasswordValue.value !== resetPasswordConfirmation.value) {
+    showError('Passwords do not match.');
+    return;
+  }
+  busy.value = true;
+  try {
+    await completePasswordReset(resetPasswordCode.value, resetPasswordValue.value);
+    forgotPasswordEmail.value = resetPasswordEmail.value;
+    resetPasswordCompleted.value = true;
+    resetPasswordValue.value = '';
+    resetPasswordConfirmation.value = '';
+  } catch (value) {
+    const code = typeof value === 'object' && value && 'code' in value ? String(value.code) : '';
+    if (code === 'auth/expired-action-code' || code === 'auth/invalid-action-code') {
+      showError('This password reset link is invalid or has expired. Request a new link to continue.');
+    } else {
+      showError(value);
+    }
+  } finally {
+    busy.value = false;
   }
 }
 
@@ -1622,8 +1739,10 @@ function getOptionClass(q: QuizQuestion, i: number | string, oIndex: number | st
 
 <template>
   <main v-if="!loading && !profile" class="login-shell">
-    <section class="login-intro"><div class="brand-mark"><img :src="classTrackSymbol" alt="ClassTrack" /></div><p class="eyebrow">CLASS TRACK</p><h1>Learning, in step together.</h1><p>Access your classes, attendance, activities, scores, and announcements from one connected workspace.</p><div class="feature-list"><span>✓ Live class records</span><span>✓ Shared mobile data</span><span>✓ Unified access</span></div></section>
-    <form v-if="authMode === 'login'" class="login-card" @submit.prevent="login"><div><p class="eyebrow">WEB PORTAL</p><h2>Welcome back</h2><p>Sign in with your existing account.</p></div><label>Email<input v-model="email" required type="email" autocomplete="email" placeholder="name@school.edu" /></label><label>Password<input v-model="password" required type="password" autocomplete="current-password" placeholder="••••••••" /></label><p v-if="error" class="alert error">{{ error }}</p><div v-if="error.includes('verify your email')" class="auth-resend"><button type="button" class="auth-link" :disabled="busy" @click="resendVerificationEmail">Resend verification email</button></div><p v-if="!isFirebaseConfigured" class="alert error">Add your Firebase web app values to <code>.env</code> before signing in.</p><button class="primary full" :disabled="busy">{{ busy ? 'Signing in…' : 'Sign in' }}</button><div class="auth-switch"><p>Don't have an account? <button type="button" class="auth-link" @click="switchAuthMode('verify')">Register as student</button></p></div></form>
+    <section class="login-intro"><div class="brand-row"><div class="brand-mark"><img :src="classTrackSymbol" alt="ICT Portal" /></div><p class="eyebrow">ICT PORTAL</p></div><h1>Learning, in step together.</h1><p>Access your classes, attendance, activities, scores, and announcements from one connected workspace.</p><div class="feature-list"><span><i>✓</i>Live class records</span><span><i>✓</i>Shared mobile data</span><span><i>✓</i>Unified access</span></div></section>
+    <form v-if="authMode === 'login'" class="login-card" @submit.prevent="login"><div><p class="eyebrow">WEB PORTAL</p><h2>Welcome back</h2><p>Sign in with your existing account.</p></div><label>Email<input v-model="email" required type="email" autocomplete="email" placeholder="name@school.edu" /></label><label class="password-field-label"><span>Password <button type="button" class="auth-link auth-link-inline" aria-label="Forgot password?" @click="goToForgotPassword">Forgot password?</button></span><div class="password-input"><input v-model="password" required :type="showPassword ? 'text' : 'password'" aria-label="Password" autocomplete="current-password" placeholder="••••••••" /><button type="button" class="password-toggle" :aria-label="showPassword ? 'Hide password' : 'Show password'" :aria-pressed="showPassword" @click="showPassword = !showPassword"><i>{{ showPassword ? 'visibility_off' : 'visibility' }}</i></button></div></label><p v-if="error" class="alert error">{{ error }}</p><div v-if="error.includes('verify your email')" class="auth-resend"><button type="button" class="auth-link" :disabled="busy" @click="resendVerificationEmail">Resend verification email</button></div><p v-if="!isFirebaseConfigured" class="alert error">Add your Firebase web app values to <code>.env</code> before signing in.</p><button class="primary full" :disabled="busy">{{ busy ? 'Signing in…' : 'Sign in' }}</button><div class="auth-switch"><p>Don't have an account? <button type="button" class="auth-link" @click="switchAuthMode('verify')">Register as student</button></p></div></form>
+    <form v-else-if="authMode === 'forgot-password'" class="login-card" @submit.prevent="requestResetEmail"><div><p class="eyebrow">PASSWORD RESET</p><h2>Reset your password</h2><p v-if="!forgotPasswordSent">Enter your email address and we’ll send a link to reset your password.</p><p v-else>Check your inbox for a password reset link.</p></div><template v-if="!forgotPasswordSent"><label>Email<input v-model="forgotPasswordEmail" required type="email" autocomplete="email" placeholder="name@school.edu" /></label><p v-if="error" class="alert error" role="alert">{{ error }}</p><button class="primary full" :disabled="busy">{{ busy ? 'Sending link…' : 'Send reset link' }}</button></template><template v-else><p class="alert success" role="status">If an account exists for this email, we sent a password reset link.</p><button class="primary full" type="button" @click="returnToLogin">Back to sign in</button></template><div class="auth-switch"><button type="button" class="auth-link" :disabled="busy" @click="returnToLogin">← Back to sign in</button></div></form>
+    <form v-else-if="authMode === 'reset-password'" class="login-card" @submit.prevent="saveNewPassword"><div><p class="eyebrow">PASSWORD RESET</p><h2>{{ resetPasswordCompleted ? 'Password updated' : 'Choose a new password' }}</h2><p v-if="resetPasswordCompleted">Your password has been changed. You can now sign in with your new password.</p><p v-else-if="resetPasswordVerified">Create a new password for {{ resetPasswordEmail }}.</p><p v-else-if="!error">Checking your password reset link…</p></div><template v-if="resetPasswordCompleted"><button class="primary full" type="button" @click="returnToLogin">Continue to sign in</button></template><template v-else-if="resetPasswordVerified"><label>New password<input v-model="resetPasswordValue" required type="password" minlength="6" autocomplete="new-password" placeholder="At least 6 characters" /></label><label>Confirm new password<input v-model="resetPasswordConfirmation" required type="password" minlength="6" autocomplete="new-password" placeholder="Confirm your new password" /></label><p v-if="error" class="alert error" role="alert">{{ error }}</p><button class="primary full" :disabled="busy">{{ busy ? 'Updating password…' : 'Update password' }}</button></template><template v-else><p v-if="error" class="alert error" role="alert">{{ error }}</p><button class="primary full" type="button" @click="goToForgotPassword">Request a new link</button></template><div v-if="!resetPasswordCompleted" class="auth-switch"><button type="button" class="auth-link" :disabled="busy" @click="returnToLogin">← Back to sign in</button></div></form>
     <form v-else-if="authMode === 'verify-notice'" class="login-card" @submit.prevent="switchAuthMode('login')"><div><p class="eyebrow">EMAIL VERIFICATION</p><h2>Verify your email</h2><p>A verification link has been sent to <strong>{{ registeredEmailForNotice }}</strong>. Please check your inbox and verify your email address before logging in.</p></div><p v-if="message" class="alert success">{{ message }}</p><p v-if="error" class="alert error">{{ error }}</p><button class="primary full" type="button" @click="switchAuthMode('login')">Go to Sign in</button><div class="auth-switch"><button type="button" class="auth-link" :disabled="busy" @click="resendVerificationEmail">Resend verification link</button></div></form>
     <form v-else-if="authMode === 'verify'" class="login-card" @submit.prevent="verifyStudent"><div><p class="eyebrow">STUDENT VERIFICATION</p><h2>Verify identity</h2><p>Verify your student number and name before registering.</p></div><label>Student Number<input v-model="regStudentNumber" required placeholder="Enter your student number" /></label><label>Full Name<input v-model="regFullName" required placeholder="Enter your full name" /></label><p v-if="error" class="alert error">{{ error }}</p><button class="primary full" :disabled="busy">{{ busy ? 'Verifying identity…' : 'Verify Identity' }}</button><div class="auth-switch"><button type="button" class="auth-link" @click="switchAuthMode('login')">Already have an account? Login</button></div></form>
     <form v-else class="login-card" @submit.prevent="registerStudentAccount"><div><p class="eyebrow">REGISTER EMAIL</p><h2>Register account</h2><p>Create your account for <strong>{{ verifiedRosterStudent?.fullName }}</strong> ({{ verifiedRosterStudent?.studentNumber }})</p></div><label>Email Address<input v-model="regEmail" required type="email" autocomplete="email" placeholder="Enter your email" /></label><label>Password<input v-model="regPassword" required type="password" minlength="6" placeholder="Create a password (min 6 chars)" /></label><label>Confirm Password<input v-model="regConfirmPassword" required type="password" minlength="6" placeholder="Confirm your password" /></label><p v-if="error" class="alert error">{{ error }}</p><button class="primary full" :disabled="busy">{{ busy ? 'Creating account…' : 'Register' }}</button><div class="auth-switch"><button type="button" class="auth-link" @click="switchAuthMode('verify')">← Back to verification</button></div></form>
@@ -1638,7 +1757,7 @@ function getOptionClass(q: QuizQuestion, i: number | string, oIndex: number | st
       <div class="desktop-navigation">
         <AppBrand />
         <nav aria-label="Primary navigation"><button v-for="item in navItems" :key="item.id" :class="{active:view === item.id}" @click="go(item.id)"><i>{{ item.icon }}</i>{{ item.label }}</button></nav>
-        <div class="account"><button v-if="profile?.role === 'student'" class="account-profile account-profile-link" type="button" aria-label="Open student profile" @click="go('profile')"><div class="avatar"><img v-if="studentProfilePhotoUrl" :src="studentProfilePhotoUrl" alt="" /><span v-else>{{ profile?.fullName?.slice(0, 1).toUpperCase() || 'U' }}</span></div><div><strong>{{ profile?.fullName || 'User' }}</strong><small>Student</small></div><span class="account-profile-chevron" aria-hidden="true">›</span></button><div v-else class="account-profile"><div class="avatar">{{ profile?.fullName?.slice(0, 1).toUpperCase() || 'U' }}</div><div><strong>{{ profile?.fullName || 'User' }}</strong><small>Teacher</small></div></div><button v-if="profile?.role === 'teacher'" class="account-signout" type="button" @click="openModal('logout')"><span aria-hidden="true">↪</span>Sign out</button></div>
+        <div class="account"><button v-if="profile?.role === 'student'" class="account-profile account-profile-link" type="button" aria-label="Open student profile" @click="go('profile')"><div class="avatar"><img v-if="studentProfilePhotoUrl" :src="studentProfilePhotoUrl" alt="" /><span v-else>{{ profile?.fullName?.slice(0, 1).toUpperCase() || 'U' }}</span></div><div><strong>{{ profile?.fullName || 'User' }}</strong><small>Student</small></div><i class="account-profile-chevron" aria-hidden="true">chevron_right</i></button><div v-else class="account-profile"><div class="avatar">{{ profile?.fullName?.slice(0, 1).toUpperCase() || 'U' }}</div><div><strong>{{ profile?.fullName || 'User' }}</strong><small>Teacher</small></div></div><button v-if="profile?.role === 'teacher'" class="account-signout" type="button" @click="openModal('logout')"><i aria-hidden="true">logout</i>Sign out</button></div>
       </div>
     </aside>
     <Transition name="mobile-nav">
@@ -1650,7 +1769,7 @@ function getOptionClass(q: QuizQuestion, i: number | string, oIndex: number | st
             <button ref="mobileMenuCloseButton" class="mobile-menu-close" type="button" aria-label="Close navigation menu" @click="closeMobileMenu()">×</button>
           </div>
           <nav aria-label="Primary navigation"><button v-for="item in navItems" :key="item.id" :class="{active:view === item.id}" @click="selectMobileView(item.id)"><i>{{ item.icon }}</i>{{ item.label }}</button></nav>
-          <div class="account"><button v-if="profile?.role === 'student'" class="account-profile account-profile-link" type="button" aria-label="Open student profile" @click="selectMobileView('profile')"><div class="avatar"><img v-if="studentProfilePhotoUrl" :src="studentProfilePhotoUrl" alt="" /><span v-else>{{ profile?.fullName?.slice(0, 1).toUpperCase() || 'U' }}</span></div><div><strong>{{ profile?.fullName || 'User' }}</strong><small>Student</small></div><span class="account-profile-chevron" aria-hidden="true">›</span></button><div v-else class="account-profile"><div class="avatar">{{ profile?.fullName?.slice(0, 1).toUpperCase() || 'U' }}</div><div><strong>{{ profile?.fullName || 'User' }}</strong><small>Teacher</small></div></div><button v-if="profile?.role === 'teacher'" class="account-signout" type="button" @click="openMobileLogout"><span aria-hidden="true">↪</span>Sign out</button></div>
+          <div class="account"><button v-if="profile?.role === 'student'" class="account-profile account-profile-link" type="button" aria-label="Open student profile" @click="selectMobileView('profile')"><div class="avatar"><img v-if="studentProfilePhotoUrl" :src="studentProfilePhotoUrl" alt="" /><span v-else>{{ profile?.fullName?.slice(0, 1).toUpperCase() || 'U' }}</span></div><div><strong>{{ profile?.fullName || 'User' }}</strong><small>Student</small></div><i class="account-profile-chevron" aria-hidden="true">chevron_right</i></button><div v-else class="account-profile"><div class="avatar">{{ profile?.fullName?.slice(0, 1).toUpperCase() || 'U' }}</div><div><strong>{{ profile?.fullName || 'User' }}</strong><small>Teacher</small></div></div><button v-if="profile?.role === 'teacher'" class="account-signout" type="button" @click="openMobileLogout"><i aria-hidden="true">logout</i>Sign out</button></div>
         </aside>
       </div>
     </Transition>
@@ -1868,7 +1987,7 @@ function getOptionClass(q: QuizQuestion, i: number | string, oIndex: number | st
             <article class="panel student-profile-card"><div class="profile-card-heading"><span aria-hidden="true">▦</span><div><h3>Academic enrollment</h3><p>Your active grade, section, and classes.</p></div></div><dl><div><dt>Grade and section</dt><dd>{{ studentAcademicLabel }}</dd></div><div><dt>Active classes</dt><dd>{{ myClasses.length }}</dd></div></dl><div v-if="myClasses.length" class="profile-class-list"><div v-for="classRecord in myClasses" :key="classRecord.id"><span><strong>{{ classRecord.className }}</strong><small>{{ classRecord.subject }}</small></span><b>{{ classRecord.gradeLevel }} · {{ classRecord.section }}</b></div></div><p v-else class="profile-empty-note">No active classes are currently assigned.</p></article>
             <article class="panel student-profile-card"><div class="profile-card-heading"><span aria-hidden="true">♢</span><div><h3>Guardian information</h3><p>Emergency and guardian contact on record.</p></div></div><dl><div><dt>Guardian name</dt><dd>{{ myStudentRecord?.guardianName || 'Not provided' }}</dd></div><div><dt>Guardian contact</dt><dd>{{ myStudentRecord?.guardianContact || 'Not provided' }}</dd></div></dl></article>
           </div>
-          <footer class="profile-page-actions profile-page-footer" aria-label="Profile actions"><button class="profile-edit-button" type="button" :disabled="!myStudentRecord" @click="openStudentProfileEditor"><span aria-hidden="true">✎</span>Edit profile</button><button class="profile-signout-button" type="button" @click="openModal('logout')"><span aria-hidden="true">↪</span>Sign out</button></footer>
+          <footer class="profile-page-actions profile-page-footer" aria-label="Profile actions"><button class="profile-edit-button" type="button" :disabled="!myStudentRecord" @click="openStudentProfileEditor"><span aria-hidden="true">✎</span>Edit profile</button><button class="profile-signout-button" type="button" @click="openModal('logout')"><i aria-hidden="true">logout</i>Sign out</button></footer>
         </section>
 
         <section v-else-if="view === 'take-quiz' && takingQuiz" class="page quiz-page">

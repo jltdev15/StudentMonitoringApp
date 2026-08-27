@@ -43,6 +43,10 @@ Guards wait for Firebase Authentication initialization before enforcing active p
 
 The repository `firebase.json` serves `teacher-portal/dist` and rewrites all application paths to `index.html`, so direct links and browser refreshes work. Run `npm run build` before deploying Firebase Hosting.
 
+## Password reset email
+
+The branded password-reset screen uses Firebase Authentication action codes. In **Firebase Console → Authentication → Templates → Password reset**, set the action URL to the deployed portal URL followed by `/reset-password`, then add that deployed domain under **Authentication → Settings → Authorized domains**. The hosting rewrite lets reset links open and refresh correctly. Authorize development domains too when testing locally.
+
 ## Global Student Feed Release
 
 The global feed uses trusted Firebase functions to publish sanitized `feedPosts` from global announcements, scheduled attendance sessions, and closed activities. Activity-achiever posts are also refreshed whenever a related score or submission changes, so score adjustments made after closing remain synchronized. Students can read these posts but can only like or select an approved comment through callable functions.

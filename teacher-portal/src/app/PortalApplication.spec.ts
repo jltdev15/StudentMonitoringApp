@@ -16,7 +16,10 @@ vi.mock('firebase/auth', () => ({
 }));
 vi.mock('firebase/firestore', () => ({Timestamp: {fromDate: vi.fn()}}));
 
-vi.mock('../services/auth.service', () => ({getUserProfile: vi.fn(), createStudentUserProfile: vi.fn()}));
+vi.mock('../services/auth.service', () => ({
+  getUserProfile: vi.fn(), createStudentUserProfile: vi.fn(), requestPasswordReset: vi.fn(),
+  verifyPasswordReset: vi.fn(), completePasswordReset: vi.fn(),
+}));
 vi.mock('../services/classes.service', () => ({getClassesByIds: vi.fn(async () => []), getTeacherClasses: vi.fn(async () => []), saveClass: vi.fn()}));
 vi.mock('../services/students.service', () => ({archiveStudent: vi.fn(), claimRosterStudent: vi.fn(), findRosterStudent: vi.fn(), getStudentRecordByUserId: vi.fn(), getStudentsByClass: vi.fn(async () => []), saveStudent: vi.fn()}));
 vi.mock('../services/attendance.service', () => ({getAttendance: vi.fn(async () => []), getStudentAttendanceRecords: vi.fn(async () => []), saveAttendance: vi.fn()}));
@@ -32,5 +35,13 @@ describe('PortalApplication', () => {
     await flushPromises();
     expect(wrapper.get('h2').text()).toBe('Welcome back');
     expect(wrapper.get('button.primary').text()).toBe('Sign in');
+  });
+
+  it('opens the password-reset request with the entered email', async () => {
+    const wrapper = mount(PortalApplication, {global: {plugins: [createPinia()]}});
+    await flushPromises();
+    await wrapper.get('input[type="email"]').setValue('learner@school.edu');
+    await wrapper.get('button.auth-link-inline').trigger('click');
+    expect(mocks.router.push).toHaveBeenCalledWith({path: '/forgot-password', query: {email: 'learner@school.edu'}});
   });
 });
