@@ -6,7 +6,7 @@ const {
   assertSucceeds,
   initializeTestEnvironment,
 } = require('@firebase/rules-unit-testing');
-const {collection, doc, getDoc, getDocs, query, setDoc, where} = require('firebase/firestore');
+const {collection, doc, getDoc, getDocs, query, setDoc, where, writeBatch} = require('firebase/firestore');
 
 let environment;
 
@@ -32,8 +32,17 @@ test.beforeEach(async () => {
       setDoc(doc(database, 'users', 'teacher-user'), {
         uid: 'teacher-user', role: 'teacher', status: 'active', teacherId: 'teacher-user', classIds: [],
       }),
+      setDoc(doc(database, 'users', 'other-teacher'), {
+        uid: 'other-teacher', role: 'teacher', status: 'active', teacherId: 'other-teacher', classIds: [],
+      }),
+      setDoc(doc(database, 'users', 'inactive-teacher'), {
+        uid: 'inactive-teacher', role: 'teacher', status: 'inactive', teacherId: 'inactive-teacher', classIds: [],
+      }),
       setDoc(doc(database, 'classes', 'class-1'), {
         teacherId: 'teacher-user', status: 'active', className: 'Grade 11 ICT',
+      }),
+      setDoc(doc(database, 'students', 'student-record'), {
+        userId: 'student-user', status: 'active', classIds: ['class-1'], fullName: 'Student One',
       }),
       setDoc(doc(database, 'activities', 'quiz-1'), {
         classId: 'class-1', status: 'active', activityCategory: 'quiz', quizData: {questions: []}, totalPoints: 25,
@@ -60,6 +69,33 @@ test('only the owning teacher can write an attendance session summary', async ()
   const summary = {classId: 'class-1', date: '2026-08-03', presentCount: 12, totalCount: 15};
   await assertSucceeds(setDoc(doc(teacherDatabase, 'attendanceSessions', 'class-1_2026-08-03'), summary));
   await assertFails(setDoc(doc(studentDatabase, 'attendanceSessions', 'class-1_2026-08-03'), summary));
+});
+
+test('the owning active teacher can atomically create and update class attendance', async () => {
+  const database = environment.authenticatedContext('teacher-user').firestore();
+  const attendance = writeBatch(database);
+  attendance.set(doc(database, 'attendance', 'class-1_student-record_2026-08-27'), {
+    classId: 'class-1', studentId: 'student-record', date: '2026-08-27', status: 'present',
+    remarks: '', recordedBy: 'teacher-user', createdAt: new Date(), updatedAt: new Date(),
+  });
+  attendance.set(doc(database, 'attendance', 'class-1_student-two_2026-08-27'), {
+    classId: 'class-1', studentId: 'student-two', date: '2026-08-27', status: 'late',
+    remarks: '', recordedBy: 'teacher-user', createdAt: new Date(), updatedAt: new Date(),
+  });
+  await assertSucceeds(attendance.commit());
+  await assertSucceeds(setDoc(doc(database, 'attendance', 'class-1_student-record_2026-08-27'), {
+    status: 'excused', remarks: 'Approved', recordedBy: 'teacher-user', updatedAt: new Date(),
+  }, {merge: true}));
+});
+
+test('a different, inactive, or unauthenticated teacher cannot write class attendance', async () => {
+  const record = {
+    classId: 'class-1', studentId: 'student-record', date: '2026-08-27', status: 'present',
+    remarks: '', recordedBy: 'teacher-user', createdAt: new Date(), updatedAt: new Date(),
+  };
+  await assertFails(setDoc(doc(environment.authenticatedContext('other-teacher').firestore(), 'attendance', 'other'), record));
+  await assertFails(setDoc(doc(environment.authenticatedContext('inactive-teacher').firestore(), 'attendance', 'inactive'), record));
+  await assertFails(setDoc(doc(environment.unauthenticatedContext().firestore(), 'attendance', 'anonymous'), record));
 });
 
 test('inactive students cannot read the global feed', async () => {

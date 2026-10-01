@@ -7,12 +7,14 @@ import {convertImageToWebP} from '../composables/useImageOptimization';
 import {downloadExtension, downloadMaterial, shortDownloadName} from '../composables/useFileDownload';
 import {useQuizQuestionFlow} from '../composables/useQuizQuestionFlow';
 import {extractQuestions, isCorrectAnswer, quizOptionEntries, scoreQuiz} from '../domain/quiz';
+import {activityTermLabel, matchesActivityTermFilter} from '../domain/activityTerm';
 import {createUserWithEmailAndPassword, onAuthStateChanged, sendEmailVerification, signInWithEmailAndPassword, signOut, type User} from 'firebase/auth';
 import {Timestamp} from 'firebase/firestore';
 import classTrackSymbol from '../assets/class-track-symbol.png';
 import AppBrand from '../components/shell/AppBrand.vue';
 import StudentFeedPage from '../components/feed/StudentFeedPage.vue';
 import TeacherStudentProfilePage from '../components/students/TeacherStudentProfilePage.vue';
+import TeacherOverviewDashboard from '../components/dashboard/TeacherOverviewDashboard.vue';
 import {auth, isFirebaseConfigured} from '../firebase';
 import {completePasswordReset, createStudentUserProfile, getUserProfile, requestPasswordReset, verifyPasswordReset} from '../services/auth.service';
 import {archiveClass, deleteClass, getClassesByIds, getTeacherClasses, saveClass} from '../services/classes.service';
@@ -25,8 +27,9 @@ import {MAX_SUBMISSION_IMAGE_BYTES, MAX_SUBMISSION_IMAGES, submitStudentImageAct
 import {getTeacherStudentProfileRecords} from '../services/teacherStudentProfile.service';
 import {backfillStudentFeed, resetTeacherData} from '../services/administration.service';
 import {hasRecordedStudentScore as hasRecordedScore, studentActivityScoreLabel as formatStudentActivityScore} from '../domain/studentActivityScore';
-import type {ActivityAttachment, ActivityCategory, ActivityMaterial, ActivityRecord, AnnouncementRecord, AttendanceRecord, AttendanceStatus, ClassRecord, QuizAnswer, QuizDocument, QuizQuestion, StudentRecord, SubmissionRecord, SubmissionStatus, UserProfile} from '../types';
+import type {ActivityAttachment, ActivityCategory, ActivityMaterial, ActivityRecord, ActivityTerm, AnnouncementRecord, AttendanceRecord, AttendanceStatus, ClassRecord, QuizAnswer, QuizDocument, QuizQuestion, StudentRecord, SubmissionRecord, SubmissionStatus, UserProfile} from '../types';
 import {classScheduleDays, classScheduleTimeSlots, emptyScheduleEntry, parseScheduleEntries, serializeScheduleEntries, type ScheduleEntry} from '../domain/classSchedule';
+import {pageValidationMessage} from './errorFeedback';
 
 type View = 'dashboard' | 'feed' | 'classes' | 'students' | 'student-profile' | 'attendance' | 'activities' | 'announcements' | 'reports' | 'utilities' | 'profile' | 'take-quiz' | 'review-quiz' | 'submit-activity';
 type Modal = 'class' | 'class-action' | 'student' | 'edit-profile' | 'profile-photo' | 'activity' | 'attachment-viewer' | 'announcement' | 'announcement-delete' | 'scores' | 'reopen-activity' | 'extend-activity' | 'reset' | 'answer-key' | 'logout' | 'confirm-next-question' | 'submit-quiz' | 'exit-quiz' | 'remove-material' | 'attendance-bulk' | null;
@@ -88,6 +91,7 @@ const announcementMenuId = ref<string | null>(null);
 // persisted status in loadClassData below.
 const attendance = ref<Record<string, {status: AttendanceStatus | ''; remarks: string}>>({});
 const attendanceSearch = ref('');
+const termFilter = ref<'all' | ActivityTerm>('all');
 const pendingAttendanceBulkIds = ref<string[]>([]);
 const submissions = ref<Record<string, SubmissionRecord>>({});
 const attendanceDate = ref(new Date().toISOString().slice(0, 10));
@@ -170,6 +174,7 @@ const activityForm = reactive({
   dueDate: '',
   totalPoints: 100,
   activityCategory: 'peta' as ActivityCategory,
+  term: '' as ActivityTerm | '',
   quizData: null as QuizDocument | null,
   quizFileName: '',
   quizFileError: '',
@@ -217,6 +222,8 @@ watch(() => route.name, name => {
 const selectedClass = computed(() => classes.value.find(item => item.id === selectedClassId.value) ?? null);
 const submissionActivity = computed(() => typeof route.params.activityId === 'string' ? myActivities.value.find(item => item.id === route.params.activityId) ?? null : null);
 const activeActivities = computed(() => activities.value.filter(item => item.status === 'active'));
+const filteredActivities = computed(() => activities.value.filter(matchesTermFilter));
+const filteredMyActivities = computed(() => myActivities.value.filter(matchesTermFilter));
 const todaySummary = computed(() => Object.values(attendance.value).reduce((summary, item) => {
   if (item.status) summary[item.status] = (summary[item.status] ?? 0) + 1;
   return summary;
@@ -292,9 +299,15 @@ function resetAlerts() { error.value = ''; message.value = ''; }
 function showMessage(value: string) { error.value = ''; message.value = value; window.setTimeout(() => { if (message.value === value) message.value = ''; }, 3800); }
 function showSuccess(value: string) { error.value = ''; notifications.success(value); }
 function userFacingError(value: unknown) {
+  // Page-level validation messages are already safe and actionable. Preserve
+  // them instead of replacing them with the generic Firebase fallback.
+  const validationMessage = pageValidationMessage(value);
+  if (validationMessage) return validationMessage;
   const code = typeof value === 'object' && value && 'code' in value
     ? String(value.code)
     : '';
+  const rawMessage = value instanceof Error ? value.message : String(value ?? '');
+  const stage = typeof value === 'object' && value && 'stage' in value ? String(value.stage) : '';
   const messages: Record<string, string> = {
     'auth/email-already-in-use': 'An account already exists for this email address.',
     'auth/invalid-credential': 'The email address or password is incorrect. Please try again.',
@@ -304,8 +317,27 @@ function userFacingError(value: unknown) {
     'auth/weak-password': 'Choose a password with at least six characters.',
     'auth/wrong-password': 'The email address or password is incorrect. Please try again.',
     'auth/user-not-found': 'The email address or password is incorrect. Please try again.',
+    'permission-denied': 'Your account does not have permission to complete this action. Ask an administrator to deploy the latest portal security rules.',
+    'firestore/permission-denied': 'Your account does not have permission to complete this action. Ask an administrator to deploy the latest portal security rules.',
+    'unauthenticated': 'Your session has expired. Sign in again before completing this action.',
+    'firestore/unauthenticated': 'Your session has expired. Sign in again before completing this action.',
+    'invalid-argument': 'The submitted information is incomplete or invalid. Review it and try again.',
+    'firestore/invalid-argument': 'The submitted information is incomplete or invalid. Review it and try again.',
+    'unavailable': 'The service is temporarily unavailable. Check your connection and try again.',
+    'firestore/unavailable': 'The service is temporarily unavailable. Check your connection and try again.',
+    'deadline-exceeded': 'The request timed out. Your changes were not saved; please try again.',
+    'firestore/deadline-exceeded': 'The request timed out. Your changes were not saved; please try again.',
+    'aborted': 'The request was interrupted by another update. Please try again.',
+    'firestore/aborted': 'The request was interrupted by another update. Please try again.',
   };
+  if (stage && rawMessage) return rawMessage;
   if (messages[code]) return messages[code];
+  if (/missing or insufficient permissions|permission-denied|permission denied/i.test(rawMessage)) {
+    return 'Attendance could not be saved because this class is not assigned to the current teacher account. Verify the class teacher ID, then try again.';
+  }
+  if (/failed to fetch|network error|webchannel|transport errored/i.test(rawMessage)) {
+    return 'We could not reach Firestore. Refresh the portal and check your internet connection, then try again.';
+  }
   if (value instanceof Error && !value.message.startsWith('Firebase:')) return value.message;
   return 'We could not complete your request. Please try again.';
 }
@@ -318,6 +350,9 @@ function isoDate(value: ActivityRecord['dueDate']) {
 function activityCategoryLabel(activity: ActivityRecord) {
   const category = activity.activityCategory || (/quiz/i.test(`${activity.title} ${activity.description}`) ? 'quiz' : 'peta');
   return category === 'coding' ? 'Coding' : category === 'quiz' ? 'Quiz' : category === 'lecture' ? 'Lecture' : 'PETA';
+}
+function matchesTermFilter(activity: Pick<ActivityRecord, 'term'>) {
+  return matchesActivityTermFilter(activity, termFilter.value);
 }
 
 async function loadClasses() {
@@ -779,6 +814,7 @@ function resetActivityForm() {
     dueDate: '',
     totalPoints: 100,
     activityCategory: 'peta',
+    term: '',
     quizData: null,
     quizFileName: '',
     quizFileError: '',
@@ -889,6 +925,7 @@ function openEditActivity(activity: ActivityRecord) {
     dueDate: dueDateStr,
     totalPoints: activity.totalPoints ?? 100,
     activityCategory: category,
+    term: activity.term ?? '',
     quizData: activity.quizData || null,
     quizFileName: activity.quizData ? 'Existing Quiz JSON Attached' : '',
     quizFileError: '',
@@ -1163,6 +1200,10 @@ async function submitActivity() {
     showError(activityForm.materialFileError);
     return;
   }
+  if (!activityForm.term) {
+    showError('Please select a term for this activity.');
+    return;
+  }
   if (activityForm.activityCategory === 'lecture') {
     const pendingNonImages = activityForm.materialFiles.filter(file => !file.type.startsWith('image/'));
     if (pendingNonImages.length) {
@@ -1189,6 +1230,7 @@ async function submitActivity() {
       dueDate: activityForm.dueDate ? Timestamp.fromDate(new Date(`${activityForm.dueDate}T23:59:59`)) : null,
       totalPoints: Number(activityForm.totalPoints),
       activityCategory: activityForm.activityCategory,
+      term: activityForm.term as ActivityTerm,
       acceptsImageAttachments: activityForm.activityCategory !== 'quiz' && activityForm.acceptsImageAttachments === true,
       materials: activityForm.existingMaterials,
       petaOutputs: activityForm.activityCategory === 'peta' ? activityForm.existingPetaOutputs : [],
@@ -1285,7 +1327,21 @@ async function submitAttendance() {
   busy.value = true;
   try {
     const items = students.value.map(student => ({studentId: student.id, status: attendance.value[student.id].status as AttendanceStatus, remarks: attendance.value[student.id]?.remarks ?? ''}));
-    await saveAttendance(selectedClassId.value, attendanceDate.value, currentUser.value.uid, items); await loadClassData(); showMessage('Attendance saved.');
+    const result = await saveAttendance(selectedClassId.value, attendanceDate.value, currentUser.value.uid, items);
+    // Saving succeeded above. A follow-up Firestore read can still fail
+    // transiently (for example, while the Listen transport reconnects), which
+    // must not turn a completed attendance save into a false failure message.
+    try {
+      await loadClassData();
+    } catch (refreshError) {
+      const refreshCode = typeof refreshError === 'object' && refreshError && 'code' in refreshError
+        ? String(refreshError.code).replace(/^firestore\//, '')
+        : 'unknown';
+      if (import.meta.env.DEV) console.warn('Attendance operation failed.', {stage: 'refresh', code: refreshCode});
+    }
+    showSuccess(result.sessionSummarySaved
+      ? 'Attendance saved.'
+      : 'Attendance saved. The school-feed summary is pending until the latest Firestore rules are deployed.');
   } catch (value) { showError(value); } finally { busy.value = false; }
 }
 async function openScores(activity: ActivityRecord) {
@@ -1756,7 +1812,7 @@ function getOptionClass(q: QuizQuestion, i: number | string, oIndex: number | st
       </div>
       <div class="desktop-navigation">
         <AppBrand />
-        <nav aria-label="Primary navigation"><button v-for="item in navItems" :key="item.id" :class="{active:view === item.id}" @click="go(item.id)"><i>{{ item.icon }}</i>{{ item.label }}</button></nav>
+        <nav aria-label="Primary navigation"><button v-for="item in navItems" :key="item.id" :class="{active:view === item.id}" :aria-current="view === item.id ? 'page' : undefined" @click="go(item.id)"><i>{{ item.icon }}</i>{{ item.label }}</button></nav>
         <div class="account"><button v-if="profile?.role === 'student'" class="account-profile account-profile-link" type="button" aria-label="Open student profile" @click="go('profile')"><div class="avatar"><img v-if="studentProfilePhotoUrl" :src="studentProfilePhotoUrl" alt="" /><span v-else>{{ profile?.fullName?.slice(0, 1).toUpperCase() || 'U' }}</span></div><div><strong>{{ profile?.fullName || 'User' }}</strong><small>Student</small></div><i class="account-profile-chevron" aria-hidden="true">chevron_right</i></button><div v-else class="account-profile"><div class="avatar">{{ profile?.fullName?.slice(0, 1).toUpperCase() || 'U' }}</div><div><strong>{{ profile?.fullName || 'User' }}</strong><small>Teacher</small></div></div><button v-if="profile?.role === 'teacher'" class="account-signout" type="button" @click="openModal('logout')"><i aria-hidden="true">logout</i>Sign out</button></div>
       </div>
     </aside>
@@ -1768,17 +1824,45 @@ function getOptionClass(q: QuizQuestion, i: number | string, oIndex: number | st
             <AppBrand />
             <button ref="mobileMenuCloseButton" class="mobile-menu-close" type="button" aria-label="Close navigation menu" @click="closeMobileMenu()">×</button>
           </div>
-          <nav aria-label="Primary navigation"><button v-for="item in navItems" :key="item.id" :class="{active:view === item.id}" @click="selectMobileView(item.id)"><i>{{ item.icon }}</i>{{ item.label }}</button></nav>
+          <nav aria-label="Primary navigation"><button v-for="item in navItems" :key="item.id" :class="{active:view === item.id}" :aria-current="view === item.id ? 'page' : undefined" @click="selectMobileView(item.id)"><i>{{ item.icon }}</i>{{ item.label }}</button></nav>
           <div class="account"><button v-if="profile?.role === 'student'" class="account-profile account-profile-link" type="button" aria-label="Open student profile" @click="selectMobileView('profile')"><div class="avatar"><img v-if="studentProfilePhotoUrl" :src="studentProfilePhotoUrl" alt="" /><span v-else>{{ profile?.fullName?.slice(0, 1).toUpperCase() || 'U' }}</span></div><div><strong>{{ profile?.fullName || 'User' }}</strong><small>Student</small></div><i class="account-profile-chevron" aria-hidden="true">chevron_right</i></button><div v-else class="account-profile"><div class="avatar">{{ profile?.fullName?.slice(0, 1).toUpperCase() || 'U' }}</div><div><strong>{{ profile?.fullName || 'User' }}</strong><small>Teacher</small></div></div><button v-if="profile?.role === 'teacher'" class="account-signout" type="button" @click="openMobileLogout"><i aria-hidden="true">logout</i>Sign out</button></div>
         </aside>
       </div>
     </Transition>
-    <section class="workspace"><header v-if="view !== 'take-quiz' && view !== 'profile' && view !== 'feed'"><div><p class="eyebrow">{{ todayLabel }}</p><h1>Good day, {{ userName }}</h1><p v-if="profile?.role === 'student'" class="student-academic-context"><span>{{ studentAcademicLabel }}</span></p></div><div class="header-actions"><select v-if="view !== 'classes' && classes.length" v-model="selectedClassId" aria-label="Select class"><option v-for="item in classes" :key="item.id" :value="item.id">{{ item.className }} · {{ item.section }}</option></select><button class="icon-button" title="Refresh" @click="loadPortal">↻</button></div></header>
-      <div v-if="error" class="alert error">{{ error }}</div><div v-if="message" class="alert success">{{ message }}</div>
+    <section class="workspace">
+      <header v-if="view !== 'take-quiz' && view !== 'profile' && view !== 'feed'">
+        <div>
+          <p class="eyebrow">{{ todayLabel }}</p>
+          <h1 v-if="view === 'dashboard' && profile?.role === 'teacher'">Overview</h1>
+          <h1 v-else>Good day, {{ userName }}</h1>
+          <p v-if="view === 'dashboard' && profile?.role === 'teacher'" class="workspace-greeting"><span>Good day, {{ userName }}</span></p>
+          <p v-else-if="profile?.role === 'student'" class="student-academic-context"><span>{{ studentAcademicLabel }}</span></p>
+        </div>
+        <div class="header-actions">
+          <select v-if="view !== 'classes' && classes.length" v-model="selectedClassId" aria-label="Select class"><option v-for="item in classes" :key="item.id" :value="item.id">{{ item.className }} · {{ item.section }}</option></select>
+          <button class="icon-button" type="button" aria-label="Refresh portal data" title="Refresh portal data" :disabled="busy" @click="loadPortal"><span aria-hidden="true">↻</span></button>
+        </div>
+      </header>
+      <div v-if="error" class="alert error" role="alert">{{ error }}</div><div v-if="message" class="alert success">{{ message }}</div>
       <template v-if="profile?.role === 'teacher'">
       <StudentFeedPage v-if="view === 'feed'" :viewer-user-id="currentUser?.uid || ''" viewer-role="teacher" :viewer-full-name="profile?.fullName || ''" />
       <TeacherStudentProfilePage v-if="view === 'student-profile' && teacherProfileStudent && selectedClass" :student="teacherProfileStudent" :class-record="selectedClass" :attendance="teacherProfileAttendance" :activities="activities" :submissions="teacherProfileSubmissions" :loading="busy" @back="leaveTeacherStudentProfile" />
-      <section v-if="view === 'dashboard'" class="page"><div class="hero-card"><div><p class="eyebrow">TODAY'S PULSE</p><h2>{{ selectedClass ? selectedClass.className : 'Start your class workspace' }}</h2><p>{{ selectedClass ? `${students.length} enrolled learners · ${todayLabel}` : 'Create a class to start managing student records.' }}</p><button class="light-button" @click="go('attendance')">Take attendance <span>→</span></button></div><div class="hero-orb">{{ todaySummary.present || 0 }}<small>present</small></div></div><div class="stat-grid"><article><span class="stat-icon blue">♙</span><div><strong>{{ students.length }}</strong><small>Students</small></div></article><article><span class="stat-icon green">✓</span><div><strong>{{ todaySummary.present || 0 }}</strong><small>Present today</small></div></article><article><span class="stat-icon orange">◷</span><div><strong>{{ todaySummary.late || 0 }}</strong><small>Late today</small></div></article><article><span class="stat-icon red">—</span><div><strong>{{ todaySummary.absent || 0 }}</strong><small>Absent today</small></div></article></div><div class="section-grid"><article class="panel"><div class="panel-title"><h3>Quick actions</h3></div><div class="quick-grid"><button @click="go('attendance')"><b>✓</b>Take attendance</button><button @click="openModal('activity')"><b>＋</b>Create activity</button><button @click="openModal('student')"><b>♙</b>Add student</button><button @click="openModal('announcement')"><b>◉</b>Post announcement</button></div></article><article class="panel"><div class="panel-title"><h3>Upcoming activities</h3><button class="text-button" @click="go('activities')">View all</button></div><div v-if="activeActivities.length" class="compact-list"><div v-for="item in activeActivities.slice(0, 4)" :key="item.id"><span class="date-square">{{ isoDate(item.dueDate).split(' ')[1] || '—' }}</span><div><strong>{{ item.title }}</strong><small>Due {{ isoDate(item.dueDate) }}</small></div><b>{{ item.totalPoints }} pts</b></div></div><p v-else class="empty-copy">No open activities for this class.</p></article></div></section>
+      <TeacherOverviewDashboard
+        v-if="view === 'dashboard'"
+        :selected-class="selectedClass"
+        :students="students"
+        :activities="activities"
+        :today-summary="todaySummary"
+        :attendance-date="attendanceDate"
+        :unmarked-attendance-count="unmarkedAttendanceStudents.length"
+        :busy="busy"
+        @take-attendance="go('attendance')"
+        @create-class="openNewClass"
+        @create-activity="openModal('activity')"
+        @add-student="openModal('student')"
+        @post-announcement="openModal('announcement')"
+        @go-activities="go('activities')"
+      />
       <section v-else-if="view === 'classes'" class="page"><div class="page-heading"><div><h2>Your classes</h2><p>Organize the subjects and sections you teach.</p></div><button class="primary" @click="openNewClass">＋ Add class</button></div><div v-if="classes.length" class="class-grid"><article v-for="item in classes" :key="item.id" class="class-card" :class="{selected:item.id === selectedClassId}" @click="selectedClassId = item.id"><div class="class-card-top"><span>{{ item.subject || 'Subject' }}</span><b>→</b></div><h3>{{ item.className }}</h3><p>{{ item.gradeLevel }} · {{ item.section }}</p><footer><span>{{ item.schedule || 'Schedule not set' }}</span><span>{{ item.id === selectedClassId ? students.length : 'Open' }} students</span></footer><div class="class-card-actions" aria-label="Class actions"><button type="button" @click.stop="openClassEditor(item)">Edit</button><button type="button" @click.stop="requestClassAction(item, 'archive')">Archive</button><button type="button" class="danger" @click.stop="requestClassAction(item, 'delete')">Delete</button></div></article></div><div v-else class="empty-state"><b>▦</b><h3>Your classes will appear here</h3><p>Create your first class to unlock attendance, activities, and student records.</p><button class="primary" @click="openNewClass">Create a class</button></div></section>
       <section v-else-if="view === 'students'" class="page"><div class="page-heading"><div><h2>{{ selectedClass ? selectedClass.className : 'Students' }}</h2><p>{{ students.length }} active students enrolled in this class.</p></div><button class="primary" :disabled="!selectedClass" @click="openModal('student')">＋ Add student</button></div><div v-if="students.length" class="panel table-panel"><table><thead><tr><th>Student</th><th>Student number</th><th>Contact</th><th>Guardian</th><th></th></tr></thead><tbody><tr v-for="student in students" :key="student.id"><td><button type="button" class="student-cell student-profile-link" :aria-label="`Open profile for ${student.fullName}`" @click="openTeacherStudentProfile(student, 'students')"><span class="avatar small"><img v-if="student.photoUrl" :src="student.photoUrl" alt="" /><span v-else>{{ student.fullName.slice(0, 1) }}</span></span><span><strong>{{ student.fullName }}</strong><small>{{ student.email || 'No email added' }}</small></span></button></td><td>{{ student.studentNumber }}</td><td>{{ student.contactNumber || '—' }}</td><td>{{ student.guardianName || '—' }}</td><td><button class="text-button danger" @click="archive(student.id)">Archive</button></td></tr></tbody></table></div><div v-else class="empty-state"><b>♙</b><h3>No students yet</h3><p>Add learners to {{ selectedClass?.className || 'your class' }} to begin.</p></div></section>
       <section v-else-if="view === 'attendance'" class="page attendance-page">
@@ -1809,10 +1893,10 @@ function getOptionClass(q: QuizQuestion, i: number | string, oIndex: number | st
         <div v-else class="empty-state"><b>✓</b><h3>No students to mark</h3><p>Add students to this class first.</p></div>
       </section>
       <section v-else-if="view === 'activities'" class="page" @click="activityMenuId = null">
-        <div class="page-heading"><div><h2>Activities & scores</h2><p>Create assessments and record learner scores.</p></div><button class="primary" :disabled="!selectedClass" @click="openModal('activity')">＋ Create activity</button></div>
-        <div v-if="activities.length" class="activity-grid">
-          <article v-for="item in activities" :key="item.id" class="activity-card">
-            <div><span :class="['tag', item.status]">{{ item.status }}</span><span class="tag">{{ activityCategoryLabel(item) }}</span><span v-if="item.quizData" class="tag" style="background: #eef4ff; color: #2563eb;">JSON Quiz</span><span class="points">{{ item.totalPoints }} points</span></div>
+        <div class="page-heading"><div><h2>Activities & scores</h2><p>Create assessments and record learner scores.</p></div><div class="header-actions"><select id="term-filter" v-model="termFilter" aria-label="Filter activities by term"><option value="all">All terms</option><option value="first">First term</option><option value="second">Second term</option><option value="third">Third term</option></select><button class="primary activity-fab" :disabled="!selectedClass" aria-label="Create activity" @click="openModal('activity')"><span aria-hidden="true" class="fab-plus">＋</span><span class="fab-label"> Create activity</span></button></div></div>
+        <div v-if="filteredActivities.length" class="activity-grid">
+          <article v-for="item in filteredActivities" :key="item.id" class="activity-card">
+            <div><span :class="['tag', item.status]">{{ item.status }}</span><span class="tag">{{ activityCategoryLabel(item) }}</span><span class="tag">{{ activityTermLabel(item) }}</span><span v-if="item.quizData" class="tag" style="background: #eef4ff; color: #2563eb;">JSON Quiz</span><span class="points">{{ item.totalPoints }} points</span></div>
             <h3>{{ item.title }}</h3><p>{{ item.description || 'No description provided.' }}</p>
             <button v-if="attachmentCountFor(item)" type="button" class="activity-attachment-summary" :aria-label="`Open ${attachmentCountFor(item)} attachments for ${item.title}`" @click="openAttachmentViewer(item)">
               <span class="activity-attachment-preview" aria-hidden="true"><img v-for="(preview, previewIndex) in lectureImagesFor(item).slice(0, 3)" :key="preview.id" :src="preview.downloadUrl" :alt="``" loading="lazy" /><span v-if="attachmentCountFor(item) > 3">+{{ attachmentCountFor(item) - 3 }}</span><span v-else-if="!lectureImagesFor(item).length" class="activity-attachment-glyph">▤</span></span>
@@ -1821,7 +1905,8 @@ function getOptionClass(q: QuizQuestion, i: number | string, oIndex: number | st
             <footer><span>Due {{ isoDate(item.dueDate) }}</span><div class="activity-card-actions"><button class="text-button" @click="openScores(item)">Scores</button><div class="activity-actions-menu"><button type="button" class="activity-menu-button" :aria-expanded="activityMenuId === item.id" :aria-controls="`activity-menu-${item.id}`" aria-label="More activity actions" title="More activity actions" @click.stop="activityMenuId = activityMenuId === item.id ? null : item.id"><span class="material-symbols-outlined" aria-hidden="true">more_horiz</span></button><div v-if="activityMenuId === item.id" :id="`activity-menu-${item.id}`" class="activity-menu" @click.stop><div class="activity-menu-group"><span class="activity-menu-label">Manage</span><button type="button" @click="openEditActivity(item)"><span class="activity-action-icon material-symbols-outlined" aria-hidden="true">edit_square</span><span>Edit activity</span></button><button v-if="item.quizData" type="button" @click="selectedAnswerKey = item; activityMenuId = null; modal = 'answer-key'"><span class="activity-action-icon material-symbols-outlined" aria-hidden="true">quiz</span><span>View answer key</span></button></div><div class="activity-menu-group activity-menu-status"><span class="activity-menu-label">Status</span><button v-if="item.status === 'active'" type="button" @click="requestActivityExtension(item)"><span class="activity-action-icon material-symbols-outlined" aria-hidden="true">calendar_clock</span><span>Extend deadline</span></button><button v-if="item.status === 'closed' && item.quizData" type="button" @click="activityMenuId = null; requestActivityReopen(item)"><span class="activity-action-icon material-symbols-outlined" aria-hidden="true">restart_alt</span><span>Reopen quiz</span></button><button v-if="item.status === 'active'" type="button" class="danger" @click="activityMenuId = null; close(item.id)"><span class="activity-action-icon material-symbols-outlined" aria-hidden="true">lock</span><span>Close activity</span></button></div></div></div></div></footer>
           </article>
         </div>
-        <div v-else class="empty-state"><b>◈</b><h3>No activities yet</h3><p>Create an activity to share it with students and begin recording scores.</p></div>
+        <div v-if="activities.length && !filteredActivities.length" class="empty-state"><b>◈</b><h3>No activities for this term</h3><p>Try a different term filter or create an activity for this term.</p></div>
+        <div v-else-if="!activities.length" class="empty-state"><b>◈</b><h3>No activities yet</h3><p>Create an activity to share it with students and begin recording scores.</p></div>
       </section>
       <section v-else-if="view === 'announcements'" class="page" @click="announcementMenuId = null"><div class="page-heading"><div><h2>Announcements</h2><p>Keep students updated with timely class information.</p></div><button class="primary" @click.stop="openNewAnnouncement">＋ New announcement</button></div><div v-if="announcements.length" class="announcement-list"><article v-for="item in announcements" :key="item.id" class="announcement-card"><div class="announcement-icon">◉</div><div class="announcement-body"><div class="announcement-meta"><span class="tag">{{ item.announcementType || 'General' }}</span><span class="announcement-audience">{{ item.classId ? classes.find(c => c.id === item.classId)?.className || 'Class' : 'All students' }}</span><button :class="['featured-toggle', {enabled: item.featured}]" :aria-pressed="item.featured === true" :disabled="busy" @click="toggleFeatured(item.id, !item.featured)"><span>{{ item.featured ? '★' : '☆' }}</span>{{ item.featured ? 'Featured' : 'Feature' }}</button><div class="announcement-actions"><button type="button" class="announcement-menu-button" :aria-expanded="announcementMenuId === item.id" :aria-controls="`announcement-menu-${item.id}`" aria-label="More announcement actions" @click.stop="announcementMenuId = announcementMenuId === item.id ? null : item.id">⋯</button><div v-if="announcementMenuId === item.id" :id="`announcement-menu-${item.id}`" class="announcement-menu" @click.stop><button type="button" @click="openAnnouncementEditor(item)">Edit announcement</button><button type="button" class="danger" @click="requestAnnouncementDeletion(item)">Delete announcement</button></div></div></div><h3>{{ item.title }}</h3><p>{{ item.message }}</p></div></article></div><div v-else class="empty-state"><b>◉</b><h3>Nothing announced yet</h3><p>Post your first update for students.</p></div></section>
       <section v-else-if="view === 'reports'" class="page"><div class="page-heading"><div><h2>Class report</h2><p>A quick view of engagement for {{ selectedClass?.className || 'your selected class' }}.</p></div><button class="secondary" @click="go('attendance')">Review attendance</button></div><div class="report-grid"><article class="panel report-card"><p class="eyebrow">ATTENDANCE</p><strong>{{ students.length ? Math.round(((todaySummary.present || 0) / students.length) * 100) : 0 }}%</strong><p>Present on {{ attendanceDate }}</p><div class="progress"><span :style="{width: `${students.length ? ((todaySummary.present || 0) / students.length) * 100 : 0}%`}"></span></div></article><article class="panel report-card"><p class="eyebrow">CLASS ROSTER</p><strong>{{ students.length }}</strong><p>Active learners enrolled</p><div class="progress blue"><span :style="{width: `${Math.min(students.length * 5, 100)}%`}"></span></div></article><article class="panel report-card"><p class="eyebrow">OPEN ACTIVITIES</p><strong>{{ activeActivities.length }}</strong><p>Ready for student work</p><div class="progress purple"><span :style="{width: `${Math.min(activeActivities.length * 20, 100)}%`}"></span></div></article></div><article class="panel report-table"><div class="panel-title"><h3>Activity score overview</h3></div><div v-if="activities.length" class="compact-list"><div v-for="activity in activities" :key="activity.id"><span class="date-square">{{ activity.totalPoints }}</span><div><strong>{{ activity.title }}</strong><small>{{ activity.status === 'active' ? 'Open for scoring' : 'Closed' }}</small></div><button class="text-button" @click="openScores(activity)">Open scores</button></div></div><p v-else class="empty-copy">Create an activity to start building a score report.</p></article></section>
@@ -1866,12 +1951,13 @@ function getOptionClass(q: QuizQuestion, i: number | string, oIndex: number | st
         </section>
         
         <section v-else-if="view === 'activities'" class="page">
-          <div class="page-heading"><div><h2>Activities & scores</h2><p>Your pending tasks and graded activities.</p></div></div>
-          <div v-if="myActivities.length" class="activity-grid">
-            <article v-for="item in myActivities" :key="item.id" class="activity-card">
+          <div class="page-heading"><div><h2>Activities & scores</h2><p>Your pending tasks and graded activities.</p></div><div class="header-actions"><select id="student-term-filter" v-model="termFilter" aria-label="Filter activities by term"><option value="all">All terms</option><option value="first">First term</option><option value="second">Second term</option><option value="third">Third term</option></select></div></div>
+          <div v-if="filteredMyActivities.length" class="activity-grid">
+            <article v-for="item in filteredMyActivities" :key="item.id" class="activity-card">
               <div>
                 <span :class="['tag', mySubmissions.find(s => s.activityId === item.id)?.status || 'missing']">{{ mySubmissions.find(s => s.activityId === item.id)?.status || 'Missing' }}</span>
                 <span class="tag">{{ activityCategoryLabel(item) }}</span>
+                <span class="tag">{{ activityTermLabel(item) }}</span>
                 <span v-if="studentScoreViewingEnabled && studentActivityScoreLabel(item)" class="points student-activity-score">{{ studentActivityScoreLabel(item) }}</span>
               </div>
               <h3>{{ item.title }}</h3><p>{{ item.description || 'No description provided.' }}</p>
@@ -1904,7 +1990,8 @@ function getOptionClass(q: QuizQuestion, i: number | string, oIndex: number | st
               </footer>
             </article>
           </div>
-          <div v-else class="empty-state"><b>◈</b><h3>No activities yet</h3><p>You have no activities assigned across your classes.</p></div>
+          <div v-if="myActivities.length && !filteredMyActivities.length" class="empty-state"><b>◈</b><h3>No activities for this term</h3><p>Try a different term filter.</p></div>
+          <div v-else-if="!myActivities.length" class="empty-state"><b>◈</b><h3>No activities yet</h3><p>You have no activities assigned across your classes.</p></div>
         </section>
 
         <section v-else-if="view === 'submit-activity'" class="page student-submission-page">
@@ -2113,6 +2200,7 @@ function getOptionClass(q: QuizQuestion, i: number | string, oIndex: number | st
           <div class="activity-column-heading"><span aria-hidden="true">✎</span><div><strong>Activity details</strong><small>Instructions, schedule, and grading</small></div></div>
           <label>Title<input v-model="activityForm.title" required placeholder="e.g. Web design quiz" /></label>
           <label>Category<select v-model="activityForm.activityCategory"><option value="peta">PETA</option><option value="quiz">Quiz</option><option value="coding">Coding</option><option value="lecture">Lecture</option></select></label>
+          <label>Term<select v-model="activityForm.term" required><option value="" disabled>Select term</option><option value="first">First term</option><option value="second">Second term</option><option value="third">Third term</option></select></label>
           <label>Description<textarea v-model="activityForm.description" placeholder="Instructions for students"></textarea></label>
           <div v-if="activityForm.activityCategory === 'quiz'" class="quiz-file-upload"><label>Quiz JSON file <small v-if="activityForm.quizData">(Optional if keeping existing JSON)</small><input type="file" accept=".json,application/json" @change="handleQuizFileUpload" :required="!activityForm.quizData" /></label><p v-if="activityForm.quizFileName" class="file-success">✓ {{ activityForm.quizFileName }}</p><p v-if="activityForm.quizFileError" class="alert error">{{ activityForm.quizFileError }}</p></div>
           <div class="form-grid"><label>Due date<input v-model="activityForm.dueDate" type="date" /></label><label>Total points<input v-model.number="activityForm.totalPoints" required min="1" type="number" /></label></div>

@@ -16,8 +16,8 @@ const config = {
 export const isFirebaseConfigured = Object.values(config).every(Boolean);
 export const app = initializeApp(config);
 export const auth = getAuth(app);
-// Auto-detect long polling when HTTP/3/WebChannel streaming is unreliable.
-// This keeps realtime listeners working on networks that produce QUIC timeout errors.
+// Prefer the standard transport and let Firestore fall back to long polling
+// only on networks where WebChannel streaming is unavailable.
 export const db = initializeFirestore(app, {experimentalAutoDetectLongPolling: true});
 export const storage = getStorage(app);
 export const functions = getFunctions(app);

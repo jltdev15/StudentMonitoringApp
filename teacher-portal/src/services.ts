@@ -13,6 +13,7 @@ import {
   updateDoc,
   where,
   writeBatch,
+  type FirestoreError,
   type DocumentData,
   type QueryDocumentSnapshot,
 } from 'firebase/firestore';
@@ -99,38 +100,139 @@ export const updateStudentProfile = async (
 
 export const attendanceIdFor = (classId: string, studentId: string, date: string) => `${classId}_${studentId}_${date}`;
 
+export type AttendanceSaveStage = 'attendance-validation' | 'attendance-write' | 'session-summary' | 'refresh';
+
+export class AttendanceSaveError extends Error {
+  readonly code: string;
+  readonly stage: AttendanceSaveStage;
+  readonly cause?: unknown;
+
+  constructor(stage: AttendanceSaveStage, code: string, message: string, options?: {cause?: unknown}) {
+    super(message);
+    this.name = 'AttendanceSaveError';
+    this.stage = stage;
+    this.code = code;
+    this.cause = options?.cause;
+  }
+}
+
+const attendanceStatuses = new Set<AttendanceStatus>(['present', 'late', 'absent', 'excused']);
+const transientAttendanceCodes = new Set(['aborted', 'deadline-exceeded', 'unavailable']);
+
+const firebaseErrorCode = (value: unknown) => {
+  if (!value || typeof value !== 'object' || !('code' in value)) return 'unknown';
+  return String((value as Pick<FirestoreError, 'code'>).code).replace(/^firestore\//, '');
+};
+
+const attendanceErrorMessage = (stage: AttendanceSaveStage, code: string) => {
+  if (code === 'permission-denied') return 'The signed-in teacher is not allowed to save attendance for this class.';
+  if (code === 'unauthenticated') return 'Your session has expired. Sign in again before saving attendance.';
+  if (code === 'invalid-argument' || stage === 'attendance-validation') return 'The attendance information is incomplete or invalid.';
+  if (transientAttendanceCodes.has(code)) return 'The attendance service is temporarily unavailable. Your selections were not changed; please try again.';
+  return 'Attendance could not be saved. Your selections were not changed; please try again.';
+};
+
+const normalizeAttendanceError = (stage: AttendanceSaveStage, value: unknown) => {
+  if (value instanceof AttendanceSaveError) return value;
+  const code = firebaseErrorCode(value);
+  if (import.meta.env.DEV) console.warn('Attendance operation failed.', {stage, code});
+  return new AttendanceSaveError(stage, code, attendanceErrorMessage(stage, code), {cause: value});
+};
+
 export const getAttendance = async (classId: string, date: string) => {
   const result = await getDocs(query(collection(db, 'attendance'), where('classId', '==', classId), where('date', '==', date)));
   return result.docs.map(item => record<AttendanceRecord>(item));
 };
 
 export const saveAttendance = async (classId: string, date: string, teacherId: string, items: {studentId: string; status: AttendanceStatus; remarks: string}[]) => {
-  const batch = writeBatch(db);
-  items.forEach(item => {
-    batch.set(doc(db, 'attendance', attendanceIdFor(classId, item.studentId, date)), {
-      ...item,
-      classId,
-      date,
-      recordedBy: teacherId,
-      updatedAt: serverTimestamp(),
-      createdAt: serverTimestamp(),
-    }, {merge: true});
+  if (!classId || !teacherId || !/^\d{4}-\d{2}-\d{2}$/.test(date) || !items.length
+    || items.some(item => !item.studentId || !attendanceStatuses.has(item.status))) {
+    throw normalizeAttendanceError('attendance-validation', {code: 'invalid-argument'});
+  }
+
+  try {
+    const [teacherSnapshot, classSnapshot, enrolledStudents] = await Promise.all([
+      getDoc(doc(db, 'users', teacherId)),
+      getDoc(doc(db, 'classes', classId)),
+      getDocs(query(collection(db, 'students'), where('classIds', 'array-contains', classId), where('status', '==', 'active'))),
+    ]);
+    const teacher = teacherSnapshot.data();
+    if (!teacherSnapshot.exists() || teacher?.role !== 'teacher' || teacher?.status !== 'active') {
+      throw new AttendanceSaveError('attendance-validation', 'unauthenticated', attendanceErrorMessage('attendance-validation', 'unauthenticated'));
+    }
+    if (!classSnapshot.exists() || classSnapshot.data().teacherId !== teacherId) {
+      throw new AttendanceSaveError('attendance-validation', 'permission-denied', attendanceErrorMessage('attendance-validation', 'permission-denied'));
+    }
+    const enrolledIds = new Set(enrolledStudents.docs.map(item => item.id));
+    if (items.some(item => !enrolledIds.has(item.studentId))) {
+      throw new AttendanceSaveError('attendance-validation', 'invalid-argument', 'One or more students are no longer enrolled in this class. Refresh the roster and try again.');
+    }
+  } catch (value) {
+    throw normalizeAttendanceError('attendance-validation', value);
+  }
+
+  const existing = await getAttendance(classId, date).catch(value => {
+    throw normalizeAttendanceError('attendance-write', value);
   });
+  const existingIds = new Set(existing.map(item => item.id));
+  const commitAttendance = async () => {
+    const batch = writeBatch(db);
+    items.forEach(item => {
+      const reference = doc(db, 'attendance', attendanceIdFor(classId, item.studentId, date));
+      const mutableData = {
+        studentId: item.studentId,
+        status: item.status,
+        remarks: item.remarks,
+        classId,
+        date,
+        recordedBy: teacherId,
+        updatedAt: serverTimestamp(),
+      };
+      if (existingIds.has(reference.id)) batch.update(reference, mutableData);
+      else batch.set(reference, {...mutableData, createdAt: serverTimestamp()});
+    });
+    await batch.commit();
+  };
+
+  try {
+    await commitAttendance();
+  } catch (firstError) {
+    const code = firebaseErrorCode(firstError);
+    if (!transientAttendanceCodes.has(code)) throw normalizeAttendanceError('attendance-write', firstError);
+    try {
+      await commitAttendance();
+    } catch (retryError) {
+      throw normalizeAttendanceError('attendance-write', retryError);
+    }
+  }
+
+  // Attendance is the primary teacher action. The session document powers the
+  // optional whole-school feed, so keep it outside the attendance batch. This
+  // prevents an older deployed rule set that does not yet allow
+  // `attendanceSessions` from rejecting every attendance record.
   const statusCounts = items.reduce<Record<string, number>>((counts, item) => {
     counts[item.status] = (counts[item.status] || 0) + 1;
     return counts;
   }, {});
-  batch.set(doc(db, 'attendanceSessions', `${classId}_${date}`), {
-    classId,
-    date,
-    recordedBy: teacherId,
-    presentCount: statusCounts.present || 0,
-    totalCount: items.length,
-    statusCounts,
-    updatedAt: serverTimestamp(),
-    createdAt: serverTimestamp(),
-  }, {merge: true});
-  await batch.commit();
+  try {
+    await setDoc(doc(db, 'attendanceSessions', `${classId}_${date}`), {
+      classId,
+      date,
+      recordedBy: teacherId,
+      presentCount: statusCounts.present || 0,
+      totalCount: items.length,
+      statusCounts,
+      updatedAt: serverTimestamp(),
+      createdAt: serverTimestamp(),
+    }, {merge: true});
+    return {attendanceSaved: true, sessionSummarySaved: true};
+  } catch (value) {
+    // The attendance records were committed above. Callers can warn that the
+    // optional feed summary is pending without incorrectly reporting a failed
+    // attendance save.
+    const summaryError = normalizeAttendanceError('session-summary', value);
+    return {attendanceSaved: true, sessionSummarySaved: false, sessionSummaryErrorCode: summaryError.code};
+  }
 };
 
 export const getActivities = async (classId: string) => {

@@ -3,6 +3,7 @@ import type {Timestamp} from 'firebase/firestore';
 export type AttendanceStatus = 'present' | 'absent' | 'late' | 'excused';
 export type SubmissionStatus = 'submitted' | 'missing' | 'late' | 'excused';
 export type ActivityCategory = 'peta' | 'quiz' | 'coding' | 'lecture';
+export type ActivityTerm = 'first' | 'second' | 'third';
 export type QuizAnswer = string | number | boolean | null;
 export type QuizOptions = QuizAnswer[] | Record<string, QuizAnswer>;
 export type QuizQuestion = {
@@ -90,6 +91,7 @@ export type ActivityRecord = {
   totalPoints: number;
   createdBy: string;
   activityCategory?: ActivityCategory;
+  term?: ActivityTerm;
   quizData?: QuizDocument;
   materials?: ActivityMaterial[];
   petaOutputs?: ActivityMaterial[];
