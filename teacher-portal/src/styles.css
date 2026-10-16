@@ -220,7 +220,7 @@ nav { display: grid; gap: 1px; } nav button { position: relative; min-height: 44
 
 /* Responsive application navigation */
 .desktop-navigation {
-  min-height: 0;
+  min-height: min-content;
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -428,15 +428,12 @@ nav { display: grid; gap: 1px; } nav button { position: relative; min-height: 44
     justify-content: space-between;
     gap: 16px;
     padding: 0 2px 24px;
+    flex-shrink: 0;
   }
   .mobile-nav-heading .brand {
     gap: 9px;
     padding: 0;
     font-size: 19px;
-  }
-  .mobile-nav-drawer nav {
-    display: grid;
-    gap: 5px;
   }
   .mobile-nav-drawer nav button {
     width: 100%;
@@ -450,6 +447,8 @@ nav { display: grid; gap: 1px; } nav button { position: relative; min-height: 44
     font-size: 19px;
   }
   .mobile-nav-drawer .account {
+    display: grid;
+    flex-shrink: 0;
     margin-top: auto;
   }
   .mobile-nav-enter-active,

@@ -12,6 +12,8 @@ import {createUserWithEmailAndPassword, onAuthStateChanged, sendEmailVerificatio
 import {Timestamp} from 'firebase/firestore';
 import classTrackSymbol from '../assets/class-track-symbol.png';
 import AppBrand from '../components/shell/AppBrand.vue';
+import GroupedNavigation from '../components/shell/GroupedNavigation.vue';
+import {activeNavigationItem, getNavigationGroups, type NavigationItemId} from '../components/shell/navigation';
 import StudentFeedPage from '../components/feed/StudentFeedPage.vue';
 import TeacherStudentProfilePage from '../components/students/TeacherStudentProfilePage.vue';
 import TeacherOverviewDashboard from '../components/dashboard/TeacherOverviewDashboard.vue';
@@ -31,7 +33,7 @@ import type {ActivityAttachment, ActivityCategory, ActivityMaterial, ActivityRec
 import {classScheduleDays, classScheduleTimeSlots, emptyScheduleEntry, parseScheduleEntries, serializeScheduleEntries, type ScheduleEntry} from '../domain/classSchedule';
 import {pageValidationMessage} from './errorFeedback';
 
-type View = 'dashboard' | 'feed' | 'classes' | 'students' | 'student-profile' | 'attendance' | 'activities' | 'announcements' | 'reports' | 'utilities' | 'profile' | 'take-quiz' | 'review-quiz' | 'submit-activity';
+type View = NavigationItemId | 'student-profile' | 'profile' | 'take-quiz' | 'review-quiz' | 'submit-activity';
 type Modal = 'class' | 'class-action' | 'student' | 'edit-profile' | 'profile-photo' | 'activity' | 'attachment-viewer' | 'announcement' | 'announcement-delete' | 'scores' | 'reopen-activity' | 'extend-activity' | 'reset' | 'answer-key' | 'logout' | 'confirm-next-question' | 'submit-quiz' | 'exit-quiz' | 'remove-material' | 'attendance-bulk' | null;
 
 const route = useRoute();
@@ -116,21 +118,8 @@ const minimumReopenDueDate = computed(() => {
 // Student scores are visible after grading.  Keep the visibility decision in
 // one place so ungraded work never renders a placeholder score.
 const studentScoreViewingEnabled = true;
-const navItems = computed(() => {
-  if (profile.value?.role === 'student') {
-    return [
-      {id: 'feed', icon: 'dynamic_feed', label: 'Feed'}, {id: 'classes', icon: 'school', label: 'My Classes'},
-      {id: 'activities', icon: 'assignment', label: 'Activities & Scores'}, {id: 'attendance', icon: 'fact_check', label: 'My Attendance'},
-      {id: 'announcements', icon: 'campaign', label: 'Announcements'},
-    ] as {id: View; icon: string; label: string}[];
-  }
-  return [
-    {id: 'dashboard', icon: 'home', label: 'Overview'}, {id: 'feed', icon: 'dynamic_feed', label: 'Feed'}, {id: 'classes', icon: 'school', label: 'Classes'},
-    {id: 'students', icon: 'groups', label: 'Students'}, {id: 'attendance', icon: 'fact_check', label: 'Attendance'},
-    {id: 'activities', icon: 'assignment', label: 'Activities'}, {id: 'announcements', icon: 'campaign', label: 'Announcements'},
-    {id: 'reports', icon: 'analytics', label: 'Reports'}, {id: 'utilities', icon: 'settings', label: 'Utilities'},
-  ] as {id: View; icon: string; label: string}[];
-});
+const navGroups = computed(() => getNavigationGroups(profile.value?.role === 'student' ? 'student' : 'teacher'));
+const activeNavId = computed(() => activeNavigationItem(view.value));
 
 // Student Data
 const myStudentRecord = ref<StudentRecord | null>(null);
@@ -1812,7 +1801,7 @@ function getOptionClass(q: QuizQuestion, i: number | string, oIndex: number | st
       </div>
       <div class="desktop-navigation">
         <AppBrand />
-        <nav aria-label="Primary navigation"><button v-for="item in navItems" :key="item.id" :class="{active:view === item.id}" :aria-current="view === item.id ? 'page' : undefined" @click="go(item.id)"><i>{{ item.icon }}</i>{{ item.label }}</button></nav>
+        <GroupedNavigation :groups="navGroups" :active-id="activeNavId" id-prefix="desktop-nav" @select="go" />
         <div class="account"><button v-if="profile?.role === 'student'" class="account-profile account-profile-link" type="button" aria-label="Open student profile" @click="go('profile')"><div class="avatar"><img v-if="studentProfilePhotoUrl" :src="studentProfilePhotoUrl" alt="" /><span v-else>{{ profile?.fullName?.slice(0, 1).toUpperCase() || 'U' }}</span></div><div><strong>{{ profile?.fullName || 'User' }}</strong><small>Student</small></div><i class="account-profile-chevron" aria-hidden="true">chevron_right</i></button><div v-else class="account-profile"><div class="avatar">{{ profile?.fullName?.slice(0, 1).toUpperCase() || 'U' }}</div><div><strong>{{ profile?.fullName || 'User' }}</strong><small>Teacher</small></div></div><button v-if="profile?.role === 'teacher'" class="account-signout" type="button" @click="openModal('logout')"><i aria-hidden="true">logout</i>Sign out</button></div>
       </div>
     </aside>
@@ -1824,7 +1813,7 @@ function getOptionClass(q: QuizQuestion, i: number | string, oIndex: number | st
             <AppBrand />
             <button ref="mobileMenuCloseButton" class="mobile-menu-close" type="button" aria-label="Close navigation menu" @click="closeMobileMenu()">×</button>
           </div>
-          <nav aria-label="Primary navigation"><button v-for="item in navItems" :key="item.id" :class="{active:view === item.id}" :aria-current="view === item.id ? 'page' : undefined" @click="selectMobileView(item.id)"><i>{{ item.icon }}</i>{{ item.label }}</button></nav>
+          <GroupedNavigation :groups="navGroups" :active-id="activeNavId" id-prefix="mobile-nav" @select="selectMobileView" />
           <div class="account"><button v-if="profile?.role === 'student'" class="account-profile account-profile-link" type="button" aria-label="Open student profile" @click="selectMobileView('profile')"><div class="avatar"><img v-if="studentProfilePhotoUrl" :src="studentProfilePhotoUrl" alt="" /><span v-else>{{ profile?.fullName?.slice(0, 1).toUpperCase() || 'U' }}</span></div><div><strong>{{ profile?.fullName || 'User' }}</strong><small>Student</small></div><i class="account-profile-chevron" aria-hidden="true">chevron_right</i></button><div v-else class="account-profile"><div class="avatar">{{ profile?.fullName?.slice(0, 1).toUpperCase() || 'U' }}</div><div><strong>{{ profile?.fullName || 'User' }}</strong><small>Teacher</small></div></div><button v-if="profile?.role === 'teacher'" class="account-signout" type="button" @click="openMobileLogout"><i aria-hidden="true">logout</i>Sign out</button></div>
         </aside>
       </div>
